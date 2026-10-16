@@ -428,24 +428,22 @@ class TestRefineGainsCore:
         np.testing.assert_allclose(mean_phase, 0, atol=1e-7)
 
     def test_amp_updates_match_linsolve(self):
-        # the scatter-built batched normal matrices are a pure speed
+        # the directly filled batched normal matrices are a pure speed
         # optimization (linsolve on the same equations is ~20x slower at
         # production scale); this cross-check keeps linsolve as the
         # independent referee for the custom machinery
         nsel, nchan = 8, 4
         bls = [(i, j) for i in range(nsel) for j in range(i + 1, nsel)]
-        nbl = len(bls)
-        wgts2d = self.rng.uniform(0.5, 2.0, (nbl, nchan))
-        resids2d = self.rng.normal(size=(nbl, nchan))
-        bl_inds, chan_inds = np.divmod(np.arange(nbl * nchan), nchan)
-        ei = np.array([bls[k][0] for k in bl_inds])
-        ej = np.array([bls[k][1] for k in bl_inds])
-        w = wgts2d[bl_inds, chan_inds]
-        r = resids2d[bl_inds, chan_inds]
+        wgts2d = self.rng.uniform(0.5, 2.0, (len(bls), nchan))
+        resids2d = self.rng.normal(size=(len(bls), nchan))
+        sel_i = np.array([bl[0] for bl in bls])
+        sel_j = np.array([bl[1] for bl in bls])
+        inc_i = skycal._antenna_incidence(sel_i, nsel)
+        inc_j = skycal._antenna_incidence(sel_j, nsel)
         amp_mats, _ = skycal._build_normal_matrices(
-            nchan, nsel, chan_inds, ei, ej, w)
-        ours = skycal._solve_logamp_updates(
-            amp_mats, chan_inds, ei, ej, w, r, nchan, nsel)
+            wgts2d, sel_i, sel_j, inc_i, inc_j, *np.zeros((2, nchan, nsel, nsel)))
+        ours = skycal._solve_logamp_updates(amp_mats, inc_i, inc_j, wgts2d,
+                                            resids2d)
         ls_data = {f'e_{i} + e_{j}': resids2d[k]
                    for k, (i, j) in enumerate(bls)}
         ls_wgts = {f'e_{i} + e_{j}': wgts2d[k]
@@ -453,6 +451,29 @@ class TestRefineGainsCore:
         sol = linsolve.LinearSolver(ls_data, wgts=ls_wgts).solve()
         theirs = np.array([sol[f'e_{i}'] for i in range(nsel)]).T
         np.testing.assert_allclose(ours, theirs, atol=1e-8)
+
+    def test_antenna_incidence_sums_match_bincount(self):
+        # the sparse incidence product sums each antenna's baselines in
+        # baseline order, exactly as np.bincount does, channel by channel
+        nants, nbls, nchans = 7, 40, 5
+        ant_idx = self.rng.integers(0, nants, nbls)
+        vals = self.rng.normal(size=(nbls, nchans))
+        sums = skycal._antenna_incidence(ant_idx, nants) @ vals
+        for chan in range(nchans):
+            np.testing.assert_array_equal(
+                sums[:, chan],
+                np.bincount(ant_idx, weights=vals[:, chan], minlength=nants))
+
+    @pytest.mark.parametrize('extra_bl', [(0, 2), (2, 0), (3, 3)],
+                             ids=['repeated', 'reversed', 'self-paired'])
+    def test_repeated_antenna_pair_raises(self, extra_bl):
+        # each baseline needs its own cells in the normal matrices
+        true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays()
+        with pytest.raises(ValueError, match='antenna pair'):
+            skycal._refine_gains_single_pol_time(
+                np.concatenate([vis_ratio, vis_ratio[:1]]),
+                np.concatenate([wgts, wgts[:1]]), np.append(ant_i, extra_bl[0]),
+                np.append(ant_j, extra_bl[1]), nants)
 
     def test_low_snr_amplitude_unbiased(self):
         # the converged solution is the stationary point of the complex
