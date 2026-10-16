@@ -618,12 +618,12 @@ def _solve_phase_updates(phase_mats, inc_i, inc_j, round_wgts, resids):
 
 def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
                             ant_j_idx):
-    '''Compute the convergence criterion: the per-channel MAXIMUM of the
-    relative gradient of chi^2 over all solved antennas. At the exact
-    weighted least-squares optimum the gradient of chi^2 with respect to
-    every gain vanishes — equivalently, every gain equals the weighted
-    projection of the data onto the other antennas' gains,
-    g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D — so
+    '''Compute the convergence check reported in meta['conv_crit']: the
+    per-channel MAXIMUM of the relative gradient of chi^2 over all solved
+    antennas. At the exact weighted least-squares optimum the gradient of
+    chi^2 with respect to every gain vanishes — equivalently, every gain
+    equals the weighted projection of the data onto the other antennas'
+    gains, g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D — so
     max |U/D - g| / |g|, the chi^2 gradient normalized by the local
     curvature D and gain scale, measures how far each cell is from the
     optimum, independently of the solver's own update sizes. Taking maxima
@@ -813,14 +813,14 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     cell_wgts = ratio_wgts[np.ix_(live_bls, good_chan_idx)]
     cell_ratio = vis_ratio[np.ix_(live_bls, good_chan_idx)]
 
-    # non-finite entries mean bad data without accompanying flags, so fail loudly
+    # non-finite cells mean bad data without accompanying flags, so fail loudly
     bad_entries = ~np.isfinite(cell_ratio)
     if bad_entries.any():
         raise ValueError(
             f'{int(bad_entries.sum())} unflagged (baseline, channel) cells '
             'have non-finite data/model ratio. Flags or zero '
             'weights must cover all bad data.')
-    # exactly-zero entries can be legitimate low-SNR data (due to quantization), but
+    # exactly-zero cells can be legitimate low-SNR data (due to quantization), but
     # they carry no usable phase and would poison the log-amplitude, so those
     # visibilities are dropped from the solve, exactly as if they had been flagged:
     # zero weight (every other cell's is positive), and a placeholder ratio of 1
