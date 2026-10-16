@@ -645,12 +645,13 @@ def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
     abs2_gains = np.abs(gains_zeroed)**2
     # each antenna's sums over the baselines it is first in and then over
     # those it is second in are one product with the stacked incidence
-    # matrix; the numerator's real and imaginary parts are summed as reals
+    # matrix; the numerator's real and imaginary parts are summed as reals,
+    # through float64 views of complex128 terms
     both_ants = _antenna_incidence(np.concatenate([ant_i_idx, ant_j_idx]),
                                    full_gains.shape[0])
     numerator_terms = np.concatenate(
         [wgtd_ratio * gains_zeroed[ant_j_idx],
-         np.conj(wgtd_ratio) * gains_zeroed[ant_i_idx]])
+         np.conj(wgtd_ratio) * gains_zeroed[ant_i_idx]], dtype=complex)
     numerator = (both_ants @ numerator_terms.view(float)).view(complex)
     denominator = both_ants @ np.concatenate(
         [ratio_wgts * abs2_gains[ant_j_idx], ratio_wgts * abs2_gains[ant_i_idx]])
