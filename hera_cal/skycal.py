@@ -765,25 +765,25 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     # linear systems below are exactly nonsingular (no regularization)
     flagged_ants, chan_flags = _shared_channel_flags(ratio_wgts, ant_i_idx,
                                                      ant_j_idx, nants)
-    good_chans = ~chan_flags
     sel_ants = np.where(~flagged_ants)[0]
     nsel = len(sel_ants)
-    unflagged = ratio_wgts > 0
+    good_chan_idx = np.where(~chan_flags)[0]
+    nchans = len(good_chan_idx)
 
-    # flatten the unflagged (baseline, channel) cells into 1D entry arrays,
-    # each tagged with its kept-channel index and its two antenna positions
+    # that structure makes the unflagged cells a dense block: every baseline
+    # between two unflagged antennas, in every kept channel. So the solve
+    # works on (baseline, channel) arrays of just those cells, with antennas
+    # renumbered among the participating ones (sel_i and sel_j hold each
+    # baseline's two antennas).
+    live_bls = np.where(~(flagged_ants[ant_i_idx] | flagged_ants[ant_j_idx]))[0]
     ant_map = np.full(nants, -1)
     ant_map[sel_ants] = np.arange(nsel)
-    good_chan_idx = np.where(good_chans)[0]
-    nchans = len(good_chan_idx)
-    bl_inds, chan_inds = np.where(unflagged[:, good_chan_idx])
-    sel_i = ant_map[ant_i_idx[bl_inds]]
-    sel_j = ant_map[ant_j_idx[bl_inds]]
-    entry_wgts = ratio_wgts[:, good_chan_idx][bl_inds, chan_inds]
-    entry_ratio = vis_ratio[:, good_chan_idx][bl_inds, chan_inds]
+    sel_i, sel_j = ant_map[ant_i_idx[live_bls]], ant_map[ant_j_idx[live_bls]]
+    cell_wgts = ratio_wgts[np.ix_(live_bls, good_chan_idx)]
+    cell_ratio = vis_ratio[np.ix_(live_bls, good_chan_idx)]
 
     # non-finite entries mean bad data without accompanying flags, so fail loudly
-    bad_entries = ~np.isfinite(entry_ratio)
+    bad_entries = ~np.isfinite(cell_ratio)
     if bad_entries.any():
         raise ValueError(
             f'{int(bad_entries.sum())} unflagged (baseline, channel) cells '
@@ -791,11 +791,12 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             'weights must cover all bad data.')
     # exactly-zero entries can be legitimate low-SNR data (due to quantization), but
     # they carry no usable phase and would poison the log-amplitude, so those
-    # visibilities are dropped from the solve, exactly as if they had been flagged
-    keep = entry_ratio != 0
-    if not keep.all():
-        chan_inds, sel_i, sel_j = chan_inds[keep], sel_i[keep], sel_j[keep]
-        entry_wgts, entry_ratio = entry_wgts[keep], entry_ratio[keep]
+    # visibilities are dropped from the solve, exactly as if they had been flagged:
+    # zero weight (every other cell's is positive), and a placeholder ratio of 1
+    # that keeps their null contributions finite
+    zero_cells = cell_ratio == 0
+    cell_wgts = np.where(zero_cells, 0.0, cell_wgts)
+    cell_ratio = np.where(zero_cells, 1.0, cell_ratio)
 
     gains = np.ones((nsel, nchans), dtype=complex)
     active_chans = np.ones(nchans, dtype=bool)   # channels still iterating
@@ -804,40 +805,37 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     chan_iters = np.zeros(nfreqs, dtype=int)     # rounds each channel used
     niter = 0
     while niter <= refine_maxiter and active_chans.any():
-        # restrict the flattened entries to channels still iterating,
-        # renumbering channels to positions within this round's batch
+        # restrict to the channels still iterating (no copies while all are)
         active_idx = np.where(active_chans)[0]
-        remap = np.full(nchans, -1)
-        remap[active_idx] = np.arange(len(active_idx))
-        in_active = active_chans[chan_inds]
-        chan_pos = remap[chan_inds[in_active]]
-        ei, ej = sel_i[in_active], sel_j[in_active]
-        echan = chan_inds[in_active]
-        wgts_here = entry_wgts[in_active]
+        batch = slice(None) if len(active_idx) == nchans else active_idx
+        wgts_here = cell_wgts[:, batch]
+        gains_here = gains[:, batch]
         nactive = len(active_idx)
 
         # residual ratio: the data with the current gain model divided out;
         # exactly exp(eta_i + eta_j + 1j * (phi_i - phi_j)) for the updates
         # (eta, phi) that remain to be solved
-        gi, gj = gains[ei, echan], gains[ej, echan]
+        gi, gj = gains_here[sel_i], gains_here[sel_j]
         with np.errstate(invalid='ignore', divide='ignore'):
-            resid_ratio = entry_ratio[in_active] / (gi * np.conj(gj))
+            resid_ratio = cell_ratio[:, batch] / (gi * np.conj(gj))
         # weights for this round: the initialization uses the data weights, while
         # Gauss-Newton rounds propagate them through the division by the current
         # gains, which multiplies each inverse variance weight by (|g_i| |g_j|)^2
         with np.errstate(over='ignore', invalid='ignore'):
+            abs_gains = np.abs(gains_here)
             round_wgts = (wgts_here if niter == 0
-                          else wgts_here * (np.abs(gi) * np.abs(gj))**2)
+                          else wgts_here * (abs_gains[sel_i] * abs_gains[sel_j])**2)
 
         # inputs were validated above, so this can only be divergence: either
         # non-finite residuals, or weights that overflowed or underflowed as the
         # gains ran away (which would leave the normal matrices unsolvable, and
         # LAPACK reports that differently on different platforms). Drop the
-        # offending channels and carry on if allowed.
-        bad = (~np.isfinite(resid_ratio) | ~np.isfinite(round_wgts)
-               | (round_wgts <= 0))
+        # offending channels and carry on if allowed. (Cells dropped from
+        # the solve above don't count.)
+        bad = ((~np.isfinite(resid_ratio) | ~np.isfinite(round_wgts)
+                | (round_wgts <= 0)) & (wgts_here > 0))
         if bad.any():
-            newly_failed = active_idx[np.unique(chan_pos[bad])]
+            newly_failed = active_idx[bad.any(axis=0)]
             failed_chans[newly_failed] = True
             active_chans[newly_failed] = False
             if failed_chans.sum() > max_failed:
@@ -849,31 +847,38 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                     f'{nchans} unflagged channels allows.')
             continue
 
+        # flatten the (baseline, channel) cells for the per-channel linear
+        # systems, tagging each with its channel's position in this round's
+        # batch and its two antenna positions
+        chan_pos = np.tile(np.arange(nactive), len(sel_i))
+        flat_sel_i = np.repeat(sel_i, nactive)
+        flat_sel_j = np.repeat(sel_j, nactive)
+        flat_wgts = round_wgts.ravel()
         if niter == 0:
             # ---- initialization round ----
             amp_mats, phase_mats = _build_normal_matrices(
-                nactive, nsel, chan_pos, ei, ej, round_wgts)
+                nactive, nsel, chan_pos, flat_sel_i, flat_sel_j, flat_wgts)
             # log-amplitudes: log|resid_ratio| = eta_i + eta_j is exactly
             # linear in the log-amplitudes — no approximation needed
-            amp_resids = np.log(np.abs(resid_ratio))
+            amp_resids = np.log(np.abs(resid_ratio)).ravel()
             # phases: wrap-immune eigenvector synchronization (see helper)
             delta_phase = _phase_sync_init(
-                resid_ratio / np.abs(resid_ratio), round_wgts, chan_pos,
-                ei, ej, nactive, nsel, sync_tol=sync_tol,
+                (resid_ratio / np.abs(resid_ratio)).ravel(), flat_wgts,
+                chan_pos, flat_sel_i, flat_sel_j, nactive, nsel, sync_tol=sync_tol,
                 sync_maxiter=sync_maxiter)
         else:
             # ---- Gauss-Newton round ----
             amp_mats, phase_mats = _build_normal_matrices(
-                nactive, nsel, chan_pos, ei, ej, round_wgts)
+                nactive, nsel, chan_pos, flat_sel_i, flat_sel_j, flat_wgts)
             # linearize: Im(resid_ratio) ~ phi_i - phi_j and
             # Re(resid_ratio) - 1 ~ eta_i + eta_j
             delta_phase = _solve_phase_updates(
-                phase_mats, chan_pos, ei, ej, round_wgts,
-                np.imag(resid_ratio), nactive, nsel)
-            amp_resids = np.real(resid_ratio) - 1.0
+                phase_mats, chan_pos, flat_sel_i, flat_sel_j, flat_wgts,
+                np.imag(resid_ratio).ravel(), nactive, nsel)
+            amp_resids = (np.real(resid_ratio) - 1.0).ravel()
         delta_logamp = _solve_logamp_updates(
-            amp_mats, chan_pos, ei, ej, round_wgts, amp_resids, nactive,
-            nsel)
+            amp_mats, chan_pos, flat_sel_i, flat_sel_j, flat_wgts, amp_resids,
+            nactive, nsel)
 
         # remove the phase degeneracy by setting the update's mean over
         # participating antennas to 0 (same convention as
@@ -883,8 +888,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         # a diverging channel overflows here before the next round detects
         # and reports its non-finite residual, so the overflow is expected
         with np.errstate(over='ignore', invalid='ignore'):
-            gains[:, active_idx] = gains[:, active_idx] \
-                * np.exp(delta_logamp.T + 1j * delta_phase.T)
+            gains[:, batch] = gains_here * np.exp(delta_logamp.T
+                                                  + 1j * delta_phase.T)
 
         # channels whose largest update is below tolerance are converged
         # and drop out of subsequent rounds; record the rounds each used
