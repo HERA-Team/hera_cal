@@ -53,6 +53,7 @@ all the caller's responsibility (hera_mc is deliberately not imported).
 """
 import numpy as np
 import linsolve
+from scipy import sparse
 from hera_filters import dspec
 
 from . import utils
@@ -267,8 +268,8 @@ def model_based_firstcal(data_model_ratio, wgts, freqs, mode='pinv',
         bl_dlys = np.full(nbls * ntimes, np.nan)
         has_wgt = flat_wgts > 0
         if has_wgt.any():
-            bl_dlys[has_wgt] = utils.fft_dly(flat_ratio[has_wgt],
-                                             df)[0].ravel()
+            bl_dlys[has_wgt] = utils.fft_dly(flat_ratio[has_wgt], df,
+                                             compute_offset=False)[0].ravel()
         bl_dlys = bl_dlys.reshape(nbls, ntimes)
 
         # per-antenna delays (degeneracy fixed: mean delay = 0), then
@@ -441,7 +442,19 @@ def _shared_channel_flags(ratio_wgts, ant_i_idx, ant_j_idx, nants):
     return flagged_ants, chan_flags
 
 
-def _build_normal_matrices(nchan_active, nsel, chan_pos, ei, ej, round_wgts):
+def _antenna_incidence(ant_idx, nants):
+    '''Sparse (nants, Nbls) matrix with a 1 at (ant_idx[b], b), so that
+    left-multiplying a (Nbls, ...) array by it sums each antenna's rows.
+    scipy accumulates those sums in baseline order, exactly as np.bincount
+    would (so the two give bit-identical results), but over every column of
+    the array at once.'''
+    nbls = len(ant_idx)
+    return sparse.csr_array((np.ones(nbls), (ant_idx, np.arange(nbls))),
+                            shape=(nants, nbls))
+
+
+def _build_normal_matrices(round_wgts, sel_i, sel_j, inc_i, inc_j, amp_mats,
+                           phase_mats):
     '''Build the batched per-channel normal matrices (the matrices of the two
     weighted least-squares systems solved each round). Amplitude equations
     have the form resid ~ eta_i + eta_j — log-amplitudes ADD, because
@@ -455,39 +468,43 @@ def _build_normal_matrices(nchan_active, nsel, chan_pos, ei, ej, round_wgts):
     its mean phase to 0.
 
     Arguments:
-        nchan_active: number of channels in the batch
-        nsel: number of participating antennas
-        chan_pos / ei / ej: int ndarrays over unflagged (baseline, channel)
-            entries giving each entry's position in the channel batch and
-            its two antenna indices
-        round_wgts: ndarray of per-entry weights for this round
+        round_wgts: (Nbls, Nchans) ndarray of this round's weights, one row
+            per baseline in the solve and one column per channel in the batch
+        sel_i / sel_j: int ndarrays of each baseline's two antennas'
+            positions among the participating antennas; each antenna pair
+            may appear in only one baseline
+        inc_i / inc_j: _antenna_incidence matrices of sel_i and sel_j
+        amp_mats / phase_mats: (Nchans, nsel, nsel) arrays filled in place.
+            Only the diagonal and the baselines' cells of amp_mats are
+            written (phase_mats is filled from it), so its other cells must
+            be 0 on input; buffers from np.zeros can therefore be reused from
+            round to round, since that pattern of cells never changes.
 
     Returns:
-        amp_mats: (nchan_active, nsel, nsel) log-amplitude system matrices
-        phase_mats: (nchan_active, nsel - 1, nsel - 1) phase system matrices
+        amp_mats: (Nchans, nsel, nsel) log-amplitude system matrices
+        phase_mats: (Nchans, nsel - 1, nsel - 1) phase system matrices
             with the first participating antenna pinned
+        Both are views of the transposed buffers: the matrices are exactly
+        symmetric, so these are the same matrices, but in the column-major
+        memory order that LAPACK uses (sparing np.linalg.solve a strided
+        copy).
     '''
-    # accumulate with np.bincount on flattened indices (several times faster
-    # than np.add.at); the amplitude and phase matrices share their diagonal
-    # blocks and differ only in the sign of the off-diagonal couplings
-    n2 = nsel * nsel
-    base = chan_pos.astype(np.int64) * n2
-    minlength = nchan_active * n2
-    diag = (np.bincount(base + ei * (nsel + 1), weights=round_wgts,
-                        minlength=minlength)
-            + np.bincount(base + ej * (nsel + 1), weights=round_wgts,
-                          minlength=minlength))
-    off = (np.bincount(base + ei * nsel + ej, weights=round_wgts,
-                       minlength=minlength)
-           + np.bincount(base + ej * nsel + ei, weights=round_wgts,
-                         minlength=minlength))
-    amp_mats = (diag + off).reshape(nchan_active, nsel, nsel)
-    phase_mats = (diag - off).reshape(nchan_active, nsel, nsel)
-    return amp_mats, phase_mats[:, 1:, 1:]
+    # each off-diagonal cell (i, j) of a channel's matrices holds the weight of
+    # the one baseline between antennas i and j (positive for amplitudes,
+    # negative for phases), so the cells are simply assigned; only the
+    # diagonals, each antenna's summed weights, need accumulating
+    nsel = inc_i.shape[0]
+    diag = (inc_i @ round_wgts + inc_j @ round_wgts).T
+    amp_mats[:, sel_i, sel_j] = amp_mats[:, sel_j, sel_i] = round_wgts.T
+    np.negative(amp_mats, out=phase_mats)
+    on_diag = (slice(None), np.arange(nsel), np.arange(nsel))
+    amp_mats[on_diag] = phase_mats[on_diag] = diag
+    return (amp_mats.transpose(0, 2, 1),
+            phase_mats.transpose(0, 2, 1)[:, 1:, 1:])
 
 
-def _phase_sync_init(phasors, round_wgts, chan_pos, ei, ej, nchan_active,
-                     nsel, sync_tol=1e-3, sync_maxiter=200):
+def _phase_sync_init(phasors, round_wgts, sel_i, sel_j, nsel, sync_tol=1e-3,
+                     sync_maxiter=200):
     '''Wrap-immune initialization of per-antenna phases by eigenvector phase
     synchronization, batched over channels.
 
@@ -511,26 +528,27 @@ def _phase_sync_init(phasors, round_wgts, chan_pos, ei, ej, nchan_active,
     is unobservable in baseline differences.
 
     Arguments:
-        phasors: complex ndarray of unit-modulus per-entry measurements u_ij
-        round_wgts: ndarray of per-entry weights
-        chan_pos / ei / ej: int ndarrays giving each entry's position in the
-            channel batch and its two antenna indices
-        nchan_active: number of channels in the batch
+        phasors: (Nbls, Nchans) complex ndarray of unit-modulus measurements
+            u_ij, one row per baseline and one column per channel in the batch
+        round_wgts: (Nbls, Nchans) ndarray of weights
+        sel_i / sel_j: int ndarrays of each baseline's two antennas'
+            positions among the participating antennas; each antenna pair
+            may appear in only one baseline
         nsel: number of participating antennas
         sync_tol: convergence threshold in radians
         sync_maxiter: iteration cap
 
     Returns:
-        phases: (nchan_active, nsel) ndarray of initial per-antenna phases,
+        phases: (Nchans, nsel) ndarray of initial per-antenna phases,
             mean 0 over antennas in each channel
     '''
-    sync_mats = np.zeros((nchan_active, nsel, nsel), dtype=np.complex64)
-    np.add.at(sync_mats, (chan_pos, ei, ej),
-              (round_wgts * phasors).astype(np.complex64))
-    np.add.at(sync_mats, (chan_pos, ej, ei),
-              (round_wgts * np.conj(phasors)).astype(np.complex64))
-    eigvec = np.ones((nchan_active, nsel, 1), dtype=np.complex64)
-    phases = np.zeros((nchan_active, nsel))
+    # each baseline has its own two cells in each channel's matrix
+    nchans = phasors.shape[1]
+    sync_mats = np.zeros((nchans, nsel, nsel), dtype=np.complex64)
+    sync_mats[:, sel_i, sel_j] += (round_wgts * phasors).astype(np.complex64).T
+    sync_mats[:, sel_j, sel_i] += (round_wgts * np.conj(phasors)).astype(np.complex64).T
+    eigvec = np.ones((nchans, nsel, 1), dtype=np.complex64)
+    phases = np.zeros((nchans, nsel))
     for _ in range(sync_maxiter):
         # one power-iteration step toward the leading eigenvector
         eigvec = sync_mats @ eigvec
@@ -563,44 +581,36 @@ def _solve_or_nan(mats, rhs):
         return solutions
 
 
-def _solve_logamp_updates(amp_mats, chan_pos, ei, ej, round_wgts, resids,
-                          nchan_active, nsel):
+def _solve_logamp_updates(amp_mats, inc_i, inc_j, round_wgts, resids):
     '''Solve the batched linear weighted least-squares systems for the
-    per-antenna log-amplitude updates. Each entry contributes the equation
-    resid ~ eta_i + eta_j, so both antennas' right-hand sides accumulate the
-    residual with POSITIVE sign (see _build_normal_matrices).
+    per-antenna log-amplitude updates. Each (baseline, channel) cell
+    contributes the equation resid ~ eta_i + eta_j, so both antennas'
+    right-hand sides accumulate the residual with POSITIVE sign (see
+    _build_normal_matrices). round_wgts and resids are (Nbls, Nchans)
+    arrays; inc_i / inc_j are the _antenna_incidence matrices of the
+    baselines' two antennas.
 
-    Returns: (nchan_active, nsel) ndarray of log-amplitude updates eta.'''
-    base = chan_pos.astype(np.int64) * nsel
+    Returns: (Nchans, nsel) ndarray of log-amplitude updates eta.'''
     wgtd_resids = round_wgts * resids
-    amp_rhs = (np.bincount(base + ei, weights=wgtd_resids,
-                           minlength=nchan_active * nsel)
-               + np.bincount(base + ej, weights=wgtd_resids,
-                             minlength=nchan_active * nsel)
-               ).reshape(nchan_active, nsel)
+    amp_rhs = (inc_i @ wgtd_resids + inc_j @ wgtd_resids).T
     return _solve_or_nan(amp_mats, amp_rhs[:, :, None])[:, :, 0]
 
 
-def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
-                         nchan_active, nsel):
+def _solve_phase_updates(phase_mats, inc_i, inc_j, round_wgts, resids):
     '''Solve the batched linear weighted least-squares systems for the
-    per-antenna phase updates. Each entry contributes the equation
-    resid ~ phi_i - phi_j (the sign flip comes from the conjugation of
-    antenna j's gain). The systems are the reduced ones with the first
-    participating antenna pinned to 0 (see _build_normal_matrices); the
-    caller removes the degeneracy of the full update by setting its mean
-    phase to 0.
+    per-antenna phase updates. Each (baseline, channel) cell contributes the
+    equation resid ~ phi_i - phi_j (the sign flip comes from the
+    conjugation of antenna j's gain). The systems are the reduced ones with
+    the first participating antenna pinned to 0 (see
+    _build_normal_matrices); the caller removes the degeneracy of the full
+    update by setting its mean phase to 0. Arguments as in
+    _solve_logamp_updates.
 
-    Returns: (nchan_active, nsel) ndarray of phase updates phi, with the
-        pinned antenna's entry equal to 0.'''
-    base = chan_pos.astype(np.int64) * nsel
+    Returns: (Nchans, nsel) ndarray of phase updates phi, with the pinned
+        antenna's entry equal to 0.'''
     wgtd_resids = round_wgts * resids
-    phase_rhs = (np.bincount(base + ei, weights=wgtd_resids,
-                             minlength=nchan_active * nsel)
-                 - np.bincount(base + ej, weights=wgtd_resids,
-                               minlength=nchan_active * nsel)
-                 ).reshape(nchan_active, nsel)
-    delta_phase = np.zeros((nchan_active, nsel))
+    phase_rhs = (inc_i @ wgtd_resids - inc_j @ wgtd_resids).T
+    delta_phase = np.zeros(phase_rhs.shape)
     delta_phase[:, 1:] = _solve_or_nan(phase_mats,
                                        phase_rhs[:, 1:, None])[:, :, 0]
     return delta_phase
@@ -608,12 +618,12 @@ def _solve_phase_updates(phase_mats, chan_pos, ei, ej, round_wgts, resids,
 
 def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
                             ant_j_idx):
-    '''Compute the convergence criterion: the per-channel MAXIMUM of the
-    relative gradient of chi^2 over all solved antennas. At the exact
-    weighted least-squares optimum the gradient of chi^2 with respect to
-    every gain vanishes — equivalently, every gain equals the weighted
-    projection of the data onto the other antennas' gains,
-    g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D — so
+    '''Compute the convergence check reported in meta['conv_crit']: the
+    per-channel MAXIMUM of the relative gradient of chi^2 over all solved
+    antennas. At the exact weighted least-squares optimum the gradient of
+    chi^2 with respect to every gain vanishes — equivalently, every gain
+    equals the weighted projection of the data onto the other antennas'
+    gains, g_i = sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2) = U / D — so
     max |U/D - g| / |g|, the chi^2 gradient normalized by the local
     curvature D and gain scale, measures how far each cell is from the
     optimum, independently of the solver's own update sizes. Taking maxima
@@ -631,16 +641,20 @@ def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
     Returns: (Nfreqs,) ndarray of the max residual over solved antennas in
         each channel; np.nan for channels with no solved cells.'''
     wgtd_ratio = np.nan_to_num(vis_ratio) * ratio_wgts
-    numerator = np.zeros(full_gains.shape, dtype=complex)
-    denominator = np.zeros(full_gains.shape)
     gains_zeroed = np.nan_to_num(full_gains)
-    np.add.at(numerator, ant_i_idx, wgtd_ratio * gains_zeroed[ant_j_idx])
-    np.add.at(denominator, ant_i_idx,
-              ratio_wgts * np.abs(gains_zeroed[ant_j_idx])**2)
-    np.add.at(numerator, ant_j_idx,
-              np.conj(wgtd_ratio) * gains_zeroed[ant_i_idx])
-    np.add.at(denominator, ant_j_idx,
-              ratio_wgts * np.abs(gains_zeroed[ant_i_idx])**2)
+    abs2_gains = np.abs(gains_zeroed)**2
+    # each antenna's sums over the baselines it is first in and then over
+    # those it is second in are one product with the stacked incidence
+    # matrix; the numerator's real and imaginary parts are summed as reals,
+    # through float64 views of complex128 terms
+    both_ants = _antenna_incidence(np.concatenate([ant_i_idx, ant_j_idx]),
+                                   full_gains.shape[0])
+    numerator_terms = np.concatenate(
+        [wgtd_ratio * gains_zeroed[ant_j_idx],
+         np.conj(wgtd_ratio) * gains_zeroed[ant_i_idx]], dtype=complex)
+    numerator = (both_ants @ numerator_terms.view(float)).view(complex)
+    denominator = both_ants @ np.concatenate(
+        [ratio_wgts * abs2_gains[ant_j_idx], ratio_wgts * abs2_gains[ant_i_idx]])
     with np.errstate(invalid='ignore', divide='ignore'):
         resid = np.abs(numerator / np.maximum(denominator, 1e-30)
                        - full_gains) / np.abs(full_gains)
@@ -707,18 +721,25 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     with no regularization. The overall phase degeneracy is fixed by pinning
     one antenna inside the solves and then removing the degeneracy from each
     update by setting its mean phase to 0 over participating antennas — the
-    same convention as redcal.remove_degen_gains. Convergence is verified
-    via the maximum relative chi^2 gradient over ALL solved cells
-    (_relative_chi2_gradient) and enforced with a RuntimeError.
+    same convention as redcal.remove_degen_gains. Each channel converges
+    when its largest update falls below refine_tol; channels that diverge
+    or exhaust refine_maxiter fail, raising a RuntimeError if more fail
+    than max_divergent_chan_frac allows. The maximum relative chi^2
+    gradient over ALL solved cells (_relative_chi2_gradient) is then
+    computed as an independent check on the solution and reported in
+    meta['conv_crit'].
 
     Arguments:
         vis_ratio: complex ndarray (Nbls, Nfreqs) of data/model ratios
-            divided by g0_i * conj(g0_j); np.nan excludes a cell. Baselines
+            divided by g0_i * conj(g0_j). Cells are excluded by zero
+            weights (non-finite ratios must carry zero weight); exactly-zero
+            ratios are dropped from the solve as if flagged. Baselines
             that should not participate (e.g. intra-SNAP) must be omitted
             from the input, not flagged.
         ratio_wgts: float ndarray (Nbls, Nfreqs) of inverse-variance weights
             for vis_ratio; 0 excludes a cell
-        ant_i_idx / ant_j_idx: int ndarrays of length Nbls indexing antennas
+        ant_i_idx / ant_j_idx: int ndarrays of length Nbls indexing antennas;
+            each pair of distinct antennas may appear in only one baseline
         nants: total number of antennas indexed
         refine_tol: convergence threshold on the largest per-(antenna,
             channel) update
@@ -745,10 +766,11 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
     Raises:
         ValueError: if max_divergent_chan_frac is not between 0 and 1, if
-            the flagging pattern is not uniform (see
-            _shared_channel_flags), or if any unflagged cell has zero or
-            non-finite data/model ratio (flags or zero weights must cover
-            all bad data)
+            an antenna pair appears in more than one baseline (repeated or
+            reversed) or a baseline pairs an antenna with itself, if the
+            flagging pattern is not uniform (see _shared_channel_flags), or
+            if any unflagged cell has a non-finite data/model ratio (flags or
+            zero weights must cover all bad data)
         RuntimeError: if more channels fail than
             max_divergent_chan_frac allows. Failed channels always come
             back as np.nan, never as partial solutions: partially
@@ -758,6 +780,15 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     if not 0.0 <= max_divergent_chan_frac <= 1.0:
         raise ValueError('max_divergent_chan_frac must be a fraction between '
                          f'0 and 1, got {max_divergent_chan_frac}.')
+    # each baseline needs its own two cells, (i, j) and (j, i), in the normal
+    # matrices (see _build_normal_matrices)
+    pairs = np.concatenate([ant_i_idx * nants + ant_j_idx,
+                            ant_j_idx * nants + ant_i_idx])
+    if len(np.unique(pairs)) < len(pairs):
+        raise ValueError(
+            'Each antenna pair may appear in only one baseline: repeated or '
+            'reversed baselines, and baselines pairing an antenna with itself, '
+            'are not supported.')
     nfreqs = vis_ratio.shape[1]
 
     # validate the flags and reduce them to one shared waterfall: whole
@@ -765,38 +796,44 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     # linear systems below are exactly nonsingular (no regularization)
     flagged_ants, chan_flags = _shared_channel_flags(ratio_wgts, ant_i_idx,
                                                      ant_j_idx, nants)
-    good_chans = ~chan_flags
     sel_ants = np.where(~flagged_ants)[0]
     nsel = len(sel_ants)
-    unflagged = ratio_wgts > 0
+    good_chan_idx = np.where(~chan_flags)[0]
+    nchans = len(good_chan_idx)
 
-    # flatten the unflagged (baseline, channel) cells into 1D entry arrays,
-    # each tagged with its kept-channel index and its two antenna positions
+    # that structure makes the unflagged cells a dense block: every baseline
+    # between two unflagged antennas, in every kept channel. So the solve
+    # works on (baseline, channel) arrays of just those cells, with antennas
+    # renumbered among the participating ones (sel_i and sel_j hold each
+    # baseline's two antennas).
+    live_bls = np.where(~(flagged_ants[ant_i_idx] | flagged_ants[ant_j_idx]))[0]
     ant_map = np.full(nants, -1)
     ant_map[sel_ants] = np.arange(nsel)
-    good_chan_idx = np.where(good_chans)[0]
-    nchans = len(good_chan_idx)
-    bl_inds, chan_inds = np.where(unflagged[:, good_chan_idx])
-    sel_i = ant_map[ant_i_idx[bl_inds]]
-    sel_j = ant_map[ant_j_idx[bl_inds]]
-    entry_wgts = ratio_wgts[:, good_chan_idx][bl_inds, chan_inds]
-    entry_ratio = vis_ratio[:, good_chan_idx][bl_inds, chan_inds]
+    sel_i, sel_j = ant_map[ant_i_idx[live_bls]], ant_map[ant_j_idx[live_bls]]
+    inc_i, inc_j = _antenna_incidence(sel_i, nsel), _antenna_incidence(sel_j, nsel)
+    cell_wgts = ratio_wgts[np.ix_(live_bls, good_chan_idx)]
+    cell_ratio = vis_ratio[np.ix_(live_bls, good_chan_idx)]
 
-    # non-finite entries mean bad data without accompanying flags, so fail loudly
-    bad_entries = ~np.isfinite(entry_ratio)
+    # non-finite cells mean bad data without accompanying flags, so fail loudly
+    bad_entries = ~np.isfinite(cell_ratio)
     if bad_entries.any():
         raise ValueError(
             f'{int(bad_entries.sum())} unflagged (baseline, channel) cells '
             'have non-finite data/model ratio. Flags or zero '
             'weights must cover all bad data.')
-    # exactly-zero entries can be legitimate low-SNR data (due to quantization), but
+    # exactly-zero cells can be legitimate low-SNR data (due to quantization), but
     # they carry no usable phase and would poison the log-amplitude, so those
-    # visibilities are dropped from the solve, exactly as if they had been flagged
-    keep = entry_ratio != 0
-    if not keep.all():
-        chan_inds, sel_i, sel_j = chan_inds[keep], sel_i[keep], sel_j[keep]
-        entry_wgts, entry_ratio = entry_wgts[keep], entry_ratio[keep]
+    # visibilities are dropped from the solve, exactly as if they had been flagged:
+    # zero weight (every other cell's is positive), and a placeholder ratio of 1
+    # that keeps their null contributions finite
+    zero_cells = cell_ratio == 0
+    cell_wgts = np.where(zero_cells, 0.0, cell_wgts)
+    cell_ratio = np.where(zero_cells, 1.0, cell_ratio)
 
+    # every round's normal matrices share one pattern of nonzero cells, so they
+    # are filled into the same zero-initialized buffers (see
+    # _build_normal_matrices)
+    amp_buf, phase_buf = np.zeros((2, nchans, nsel, nsel))
     gains = np.ones((nsel, nchans), dtype=complex)
     active_chans = np.ones(nchans, dtype=bool)   # channels still iterating
     failed_chans = np.zeros(nchans, dtype=bool)  # channels that gave up (nan)
@@ -804,40 +841,36 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     chan_iters = np.zeros(nfreqs, dtype=int)     # rounds each channel used
     niter = 0
     while niter <= refine_maxiter and active_chans.any():
-        # restrict the flattened entries to channels still iterating,
-        # renumbering channels to positions within this round's batch
+        # restrict to the channels still iterating (no copies while all are)
         active_idx = np.where(active_chans)[0]
-        remap = np.full(nchans, -1)
-        remap[active_idx] = np.arange(len(active_idx))
-        in_active = active_chans[chan_inds]
-        chan_pos = remap[chan_inds[in_active]]
-        ei, ej = sel_i[in_active], sel_j[in_active]
-        echan = chan_inds[in_active]
-        wgts_here = entry_wgts[in_active]
-        nactive = len(active_idx)
+        batch = slice(None) if len(active_idx) == nchans else active_idx
+        wgts_here = cell_wgts[:, batch]
+        gains_here = gains[:, batch]
 
         # residual ratio: the data with the current gain model divided out;
         # exactly exp(eta_i + eta_j + 1j * (phi_i - phi_j)) for the updates
         # (eta, phi) that remain to be solved
-        gi, gj = gains[ei, echan], gains[ej, echan]
+        gi, gj = gains_here[sel_i], gains_here[sel_j]
         with np.errstate(invalid='ignore', divide='ignore'):
-            resid_ratio = entry_ratio[in_active] / (gi * np.conj(gj))
+            resid_ratio = cell_ratio[:, batch] / (gi * np.conj(gj))
         # weights for this round: the initialization uses the data weights, while
         # Gauss-Newton rounds propagate them through the division by the current
         # gains, which multiplies each inverse variance weight by (|g_i| |g_j|)^2
         with np.errstate(over='ignore', invalid='ignore'):
+            abs_gains = np.abs(gains_here)
             round_wgts = (wgts_here if niter == 0
-                          else wgts_here * (np.abs(gi) * np.abs(gj))**2)
+                          else wgts_here * (abs_gains[sel_i] * abs_gains[sel_j])**2)
 
         # inputs were validated above, so this can only be divergence: either
         # non-finite residuals, or weights that overflowed or underflowed as the
         # gains ran away (which would leave the normal matrices unsolvable, and
         # LAPACK reports that differently on different platforms). Drop the
-        # offending channels and carry on if allowed.
-        bad = (~np.isfinite(resid_ratio) | ~np.isfinite(round_wgts)
-               | (round_wgts <= 0))
+        # offending channels and carry on if allowed. (Cells dropped from
+        # the solve above don't count.)
+        bad = ((~np.isfinite(resid_ratio) | ~np.isfinite(round_wgts)
+                | (round_wgts <= 0)) & (wgts_here > 0))
         if bad.any():
-            newly_failed = active_idx[np.unique(chan_pos[bad])]
+            newly_failed = active_idx[bad.any(axis=0)]
             failed_chans[newly_failed] = True
             active_chans[newly_failed] = False
             if failed_chans.sum() > max_failed:
@@ -852,28 +885,27 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         if niter == 0:
             # ---- initialization round ----
             amp_mats, phase_mats = _build_normal_matrices(
-                nactive, nsel, chan_pos, ei, ej, round_wgts)
+                round_wgts, sel_i, sel_j, inc_i, inc_j,
+                amp_buf[:len(active_idx)], phase_buf[:len(active_idx)])
             # log-amplitudes: log|resid_ratio| = eta_i + eta_j is exactly
             # linear in the log-amplitudes — no approximation needed
             amp_resids = np.log(np.abs(resid_ratio))
             # phases: wrap-immune eigenvector synchronization (see helper)
             delta_phase = _phase_sync_init(
-                resid_ratio / np.abs(resid_ratio), round_wgts, chan_pos,
-                ei, ej, nactive, nsel, sync_tol=sync_tol,
-                sync_maxiter=sync_maxiter)
+                resid_ratio / np.abs(resid_ratio), round_wgts, sel_i, sel_j,
+                nsel, sync_tol=sync_tol, sync_maxiter=sync_maxiter)
         else:
             # ---- Gauss-Newton round ----
             amp_mats, phase_mats = _build_normal_matrices(
-                nactive, nsel, chan_pos, ei, ej, round_wgts)
+                round_wgts, sel_i, sel_j, inc_i, inc_j,
+                amp_buf[:len(active_idx)], phase_buf[:len(active_idx)])
             # linearize: Im(resid_ratio) ~ phi_i - phi_j and
             # Re(resid_ratio) - 1 ~ eta_i + eta_j
             delta_phase = _solve_phase_updates(
-                phase_mats, chan_pos, ei, ej, round_wgts,
-                np.imag(resid_ratio), nactive, nsel)
+                phase_mats, inc_i, inc_j, round_wgts, np.imag(resid_ratio))
             amp_resids = np.real(resid_ratio) - 1.0
-        delta_logamp = _solve_logamp_updates(
-            amp_mats, chan_pos, ei, ej, round_wgts, amp_resids, nactive,
-            nsel)
+        delta_logamp = _solve_logamp_updates(amp_mats, inc_i, inc_j,
+                                             round_wgts, amp_resids)
 
         # remove the phase degeneracy by setting the update's mean over
         # participating antennas to 0 (same convention as
@@ -883,8 +915,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         # a diverging channel overflows here before the next round detects
         # and reports its non-finite residual, so the overflow is expected
         with np.errstate(over='ignore', invalid='ignore'):
-            gains[:, active_idx] = gains[:, active_idx] \
-                * np.exp(delta_logamp.T + 1j * delta_phase.T)
+            gains[:, batch] = gains_here * np.exp(delta_logamp.T
+                                                  + 1j * delta_phase.T)
 
         # channels whose largest update is below tolerance are converged
         # and drop out of subsequent rounds; record the rounds each used
@@ -958,8 +990,10 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
 
     Raises:
         ValueError: if ant_to_SNAP_dict is given but missing antennas, if
-            the flagging pattern is not uniform (see _shared_channel_flags),
-            or if any unflagged cell has non-finite data/model ratio
+            an antenna pair appears in more than one baseline (e.g. both
+            (i, j) and (j, i)), if the flagging pattern is not uniform (see
+            _shared_channel_flags), or if any unflagged cell has non-finite
+            data/model ratio
         RuntimeError: if any (time, pol) has more failed channels than
             max_divergent_chan_frac allows
     '''

@@ -240,7 +240,8 @@ def history_string(notes=""):
 
 
 # XXX change df/ f0 for freqs directly
-def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0):
+def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut=0,
+            compute_offset=True):
     """Get delay of visibility across band using FFT and Quinn's Second Method to fit the delay and phase offset.
     Arguments:
         data : ndarray of complex data (e.g. gains or visibilities) of shape (Ntimes, Nfreqs)
@@ -250,9 +251,12 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
         medfilt : boolean, median filter data before fft
         kernel : size of median filter kernel along (time, freq) axes
         edge_cut : int, number of channels to exclude at each band edge of data in FFT window
+        compute_offset : boolean, if False skip estimating the phase offset (most of the cost
+            for long arrays) and return None in its place
     Returns:
         dlys : (Ntimes, 1) ndarray containing delay for each integration
-        offset : (Ntimes, 1) ndarray containing estimated frequency-independent phases
+        offset : (Ntimes, 1) ndarray containing estimated frequency-independent phases,
+            or None if compute_offset is False
     """
     # setup
     Ntimes, Nfreqs = data.shape
@@ -281,8 +285,9 @@ def fft_dly(data, df, wgts=None, f0=0.0, medfilt=False, kernel=(1, 11), edge_cut
     # get interpolated peak and indices
     inds, bin_shifts, peaks, interp_peaks = interp_peak(vfft)
     dlys = (fftfreqs[inds] + bin_shifts * dtau).reshape(-1, 1)
+    if not compute_offset:
+        return dlys, None
 
-    # XXX if not using phase offset, should have mode to not compute it?
     # Now that we know the slope, estimate the remaining phase offset
     freqs = np.arange(Nfreqs, dtype=data.dtype) * df + f0
     fSlice = slice(edge_cut, len(freqs) - edge_cut)
