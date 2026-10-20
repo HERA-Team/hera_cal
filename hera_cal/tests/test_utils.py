@@ -390,7 +390,8 @@ def test_JD2RA():
     assert np.allclose(ra[0], 225.37671446615548)
 
 
-def test_combine_calfits():
+def test_combine_calfits(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     test_file1 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.abs.calfits')
     test_file2 = os.path.join(DATA_PATH, 'zen.2458043.12552.xx.HH.uvORA.dly.calfits')
     # test basic execution
