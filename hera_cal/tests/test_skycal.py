@@ -947,6 +947,30 @@ class TestEstimateSNAPDecoherence:
             *args, max_block_error_inflation=np.inf, **kwargs)
         assert np.isfinite(meta['log_suppression']['A'][1, 7])
 
+    def test_complementary_flags_within_a_SNAP(self):
+        # at the second integration, one antenna on SNAP A has block 6
+        # flagged, stranding its block 7, and the other two have block 7
+        # flagged. The union of their flags leaves every channel unflagged,
+        # but each spectrum has its own smooth model, so block 7's level
+        # rests on the stranded remnant alone and must not be fit
+        nblocks = 8
+        sim = build_decoherence_sim({'A': np.zeros(nblocks),
+                                     'B': np.zeros(nblocks)},
+                                    ntimes=2, seed=14)
+        for key in sim['logamp_wgts']:
+            if key[0] == 0:
+                sim['logamp_wgts'][key][1, 192:224] = 0
+            elif sim['ant_to_SNAP_dict'][key[0]] == 'A':
+                sim['logamp_wgts'][key][1, 224:] = 0
+        _, meta = skycal.estimate_SNAP_decoherence(
+            sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'],
+            sim['freqs'], nchans_per_block=sim['nchans_per_block'],
+            **DECO_KWARGS)
+        assert np.isnan(meta['log_suppression']['A'][1, 7])
+        assert np.isfinite(meta['log_suppression']['A'][1, :7]).all()
+        assert np.isfinite(meta['log_suppression']['A'][0]).all()
+        assert np.isfinite(meta['log_suppression']['B']).all()
+
     def test_missing_SNAP_or_wgts_raises(self):
         sim = build_decoherence_sim({'A': np.zeros(8), 'B': np.zeros(8)})
         incomplete = dict(sim['ant_to_SNAP_dict'])

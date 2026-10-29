@@ -1485,8 +1485,9 @@ def block_error_inflation(flags, freqs, nchans_per_block=96,
     model's resolution (a few MHz at the default 100 ns) can be given any
     level by the smooth model, so its ratio grows without limit, and so
     does the size of the false detections a fit to it can make. The ratio
-    depends only on the flags, not on the data; estimate_SNAP_decoherence
-    applies it to each SNAP's own flags.
+    depends only on the flags, not on the data. estimate_SNAP_decoherence
+    judges each spectrum by its own flags, since each has its own smooth
+    model, and averages over a SNAP's spectra.
 
     Arguments:
         flags: (Ntimes, Nfreqs) boolean flag waterfall
@@ -1605,9 +1606,9 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
     covered blocks is indistinguishable from smooth structure, so the
     least-suppressed covered block is pinned to 0 — estimates are RELATIVE
     to each band's cleanest block, unlike diff-based estimates. The same
-    degeneracy strikes a single block when a SNAP's flags at an integration
-    cut what is left of it off from the rest of its band, so such blocks
-    are not fit there (see max_block_error_inflation).
+    degeneracy strikes a single block when flags at an integration cut what
+    is left of it off from the rest of its band in a SNAP's spectra, so
+    such blocks are not fit there (see max_block_error_inflation).
 
     Arguments:
         gains: dict mapping (ant, antpol) to complex (Ntimes, Nfreqs)
@@ -1649,11 +1650,13 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
         full_block_coverage: blocks below this unflagged fraction (or at a
             band edge) are excluded from the noise-inflation diagnostic
         max_block_error_inflation: a block is not fit for a SNAP at an
-            integration where that SNAP's flags inflate the block's error
-            more than this many times over (see block_error_inflation): a
-            remnant cut off from the rest of its band by wide flagged gaps
-            on both sides is degenerate with the smooth model, so a fit to
-            it can make false detections of any size, up to p = 1
+            integration where the flags inflate the block's error more than
+            this many times over (see block_error_inflation), judging each
+            of the SNAP's spectra by its own flags and averaging their
+            precisions: a remnant cut off from the rest of its band by wide
+            flagged gaps on both sides is degenerate with the smooth model,
+            so a fit to it can make false detections of any size, up to
+            p = 1
         verbose: print statements if True
 
     Returns:
@@ -1737,10 +1740,20 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
         edge_blocks |= {b for b in in_band
                         if coverage[b] < full_block_coverage}
     # each block's precision with every in-band channel unflagged, against
-    # which each SNAP's flags are judged (see block_error_inflation)
+    # which each spectrum's flags are judged (see block_error_inflation)
     reference_precision = _block_precision(np.ones(nfreqs, dtype=bool),
                                            band_slices, dpss_bases,
                                            block_design)
+    precision_by_flags = {}
+
+    def _cached_block_precision(unflagged):
+        '''_block_precision for one flag pattern, cached because spectra
+        usually share their flags.'''
+        key = unflagged.tobytes()
+        if key not in precision_by_flags:
+            precision_by_flags[key] = _block_precision(
+                unflagged, band_slices, dpss_bases, block_design)
+        return precision_by_flags[key]
 
     # HAC ("heteroskedasticity and autocorrelation consistent", the
     # Newey-West error construction — see the docstring) settings:
@@ -1796,13 +1809,15 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
             # threshold (matching the min_block_coverage documentation);
             # sparse blocks would otherwise get under-inflated errors,
             # since their HAC sigma cannot be measured reliably. Nor is a
-            # block fit if this SNAP's flags cut it off from the rest of
-            # its band, leaving its level degenerate with the smooth model.
+            # block fit if flags cut it off from the rest of its band,
+            # leaving its level degenerate with the smooth model. Each
+            # spectrum has its own smooth model, so each is judged by its
+            # own flags; the fit adds their precisions, so their mean is
+            # compared with that of a fully unflagged spectrum.
             with np.errstate(divide='ignore', invalid='ignore'):
-                error_inflation = np.sqrt(
-                    reference_precision / _block_precision(
-                        total_wgts > 0, band_slices, dpss_bases,
-                        block_design))
+                error_inflation = np.sqrt(reference_precision / np.mean(
+                    [_cached_block_precision(wgt > 0) for _, wgt in spectra],
+                    axis=0))
             ok_blocks = ((normal_diag > 0) & covered_blocks
                          & (error_inflation <= max_block_error_inflation))
             if not ok_blocks.any():
