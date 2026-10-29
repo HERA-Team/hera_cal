@@ -1453,13 +1453,83 @@ def _fix_band_floors(block_vals, band_blocks):
             block_vals[in_band] -= block_vals[in_band].min()
 
 
+def _block_precision(unflagged, band_slices, dpss_bases, block_design):
+    '''How precisely one spectrum, with unit noise on each channel where
+    the (Nfreqs,) boolean array unflagged is True, would measure each
+    X-engine block's level while the smooth model is fit alongside it: the
+    inverse variance of that level, as in the estimator's per-block errors.
+    It is the sum over unflagged channels of the squared residual of the
+    block's 0/1 indicator after the smooth model is fit to it band by band,
+    so any part of a block the smooth model can absorb counts for nothing.
+    A band with no more unflagged channels than DPSS modes is fit exactly
+    by the smooth model, so its blocks get 0.'''
+    wgts = np.zeros(len(unflagged))
+    for band, basis in zip(band_slices, dpss_bases):
+        if band is not None and np.sum(unflagged[band]) > basis.shape[1]:
+            wgts[band] = unflagged[band]
+    resid = _project_out_smooth(block_design, wgts, band_slices, dpss_bases)
+    return np.sum(wgts[:, None] * resid**2, axis=0)
+
+
+def block_error_inflation(flags, freqs, nchans_per_block=96,
+                          gain_smoothing_scale=100e-9, eigenval_cutoff=1e-12,
+                          band_split_freq=100e6):
+    '''How many times over a flag waterfall inflates each X-engine block's
+    error in estimate_SNAP_decoherence, per integration: the ratio of the
+    block's error under that integration's flags to its error with every
+    channel of its band unflagged. A block's level is told apart from the
+    smooth gain model by its steps at the walls it shares with unflagged
+    data, so the ratio stays modest for a block remnant that still touches
+    unflagged data on one side, even one only a few channels wide. A
+    remnant cut off on both sides by flagged gaps wider than the smooth
+    model's resolution (a few MHz at the default 100 ns) can be given any
+    level by the smooth model, so its ratio grows without limit, and so
+    does the size of the false detections a fit to it can make. The ratio
+    depends only on the flags, not on the data; estimate_SNAP_decoherence
+    applies it to each SNAP's own flags.
+
+    Arguments:
+        flags: (Ntimes, Nfreqs) boolean flag waterfall
+        freqs: (Nfreqs,) frequencies in Hz
+        nchans_per_block, gain_smoothing_scale, eigenval_cutoff,
+        band_split_freq: as in estimate_SNAP_decoherence, whose bands
+            (trimmed to their not-always-flagged channels) and smooth model
+            are used here
+
+    Returns:
+        inflation: (Ntimes, Nblocks) ndarray: 1 where nothing in a block's
+            band is flagged at that integration and larger the more the
+            flags isolate it; np.inf where the block has no unflagged
+            channels (or its band too few for the smooth fit), and np.nan
+            for blocks outside both bands
+    '''
+    flags = np.asarray(flags, dtype=bool)
+    freqs = np.asarray(freqs)
+    _, band_slices = flag_utils.get_minimal_slices(
+        flags, freqs=freqs, freq_cuts=[band_split_freq])
+    _, block_design = _block_design_matrix(len(freqs), nchans_per_block)
+    dpss_bases = _dpss_bases(freqs, band_slices, gain_smoothing_scale,
+                             eigenval_cutoff)
+    reference = _block_precision(np.ones(len(freqs), dtype=bool),
+                                 band_slices, dpss_bases, block_design)
+    inflation = np.full((len(flags), block_design.shape[1]), np.nan)
+    for tind, flags_here in enumerate(flags):
+        precision = _block_precision(~flags_here, band_slices, dpss_bases,
+                                     block_design)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            inflation[tind] = np.where(reference > 0,
+                                       np.sqrt(reference / precision), np.nan)
+    return inflation
+
+
 def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
                               freqs, nchans_per_block=96,
                               gain_smoothing_scale=100e-9,
                               eigenval_cutoff=1e-12, detection_sigma=2.0,
                               full_sigma=3.0, band_split_freq=100e6,
                               min_block_coverage=0.05,
-                              full_block_coverage=0.9, verbose=False):
+                              full_block_coverage=0.9,
+                              max_block_error_inflation=5.0, verbose=False):
     '''Estimate per-SNAP, per-X-engine-block signal loss ("decoherence")
     from the spectral structure of the refined gains.
 
@@ -1534,7 +1604,10 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
     DEGENERACY (important): within each band, a suppression common to ALL
     covered blocks is indistinguishable from smooth structure, so the
     least-suppressed covered block is pinned to 0 — estimates are RELATIVE
-    to each band's cleanest block, unlike diff-based estimates.
+    to each band's cleanest block, unlike diff-based estimates. The same
+    degeneracy strikes a single block when a SNAP's flags at an integration
+    cut what is left of it off from the rest of its band, so such blocks
+    are not fit there (see max_block_error_inflation).
 
     Arguments:
         gains: dict mapping (ant, antpol) to complex (Ntimes, Nfreqs)
@@ -1575,6 +1648,12 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
         min_block_coverage: minimum unflagged fraction for a block to be fit
         full_block_coverage: blocks below this unflagged fraction (or at a
             band edge) are excluded from the noise-inflation diagnostic
+        max_block_error_inflation: a block is not fit for a SNAP at an
+            integration where that SNAP's flags inflate the block's error
+            more than this many times over (see block_error_inflation): a
+            remnant cut off from the rest of its band by wide flagged gaps
+            on both sides is degenerate with the smooth model, so a fit to
+            it can make false detections of any size, up to p = 1
         verbose: print statements if True
 
     Returns:
@@ -1657,6 +1736,11 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
             edge_blocks |= {in_band[0], in_band[-1]}
         edge_blocks |= {b for b in in_band
                         if coverage[b] < full_block_coverage}
+    # each block's precision with every in-band channel unflagged, against
+    # which each SNAP's flags are judged (see block_error_inflation)
+    reference_precision = _block_precision(np.ones(nfreqs, dtype=bool),
+                                           band_slices, dpss_bases,
+                                           block_design)
 
     # HAC ("heteroskedasticity and autocorrelation consistent", the
     # Newey-West error construction — see the docstring) settings:
@@ -1711,8 +1795,16 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
             # a block is fit only if it has data AND meets the coverage
             # threshold (matching the min_block_coverage documentation);
             # sparse blocks would otherwise get under-inflated errors,
-            # since their HAC sigma cannot be measured reliably
-            ok_blocks = (normal_diag > 0) & covered_blocks
+            # since their HAC sigma cannot be measured reliably. Nor is a
+            # block fit if this SNAP's flags cut it off from the rest of
+            # its band, leaving its level degenerate with the smooth model.
+            with np.errstate(divide='ignore', invalid='ignore'):
+                error_inflation = np.sqrt(
+                    reference_precision / _block_precision(
+                        total_wgts > 0, band_slices, dpss_bases,
+                        block_design))
+            ok_blocks = ((normal_diag > 0) & covered_blocks
+                         & (error_inflation <= max_block_error_inflation))
             if not ok_blocks.any():
                 continue
             # estimator kernel: the weighted, smooth-projected block design
