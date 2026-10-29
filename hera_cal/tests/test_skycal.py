@@ -820,6 +820,38 @@ class TestDecoherenceHelpers:
         np.testing.assert_allclose(inv_var[(2, 'Jee')],
                                    2 * 1.0 * w12 * 1.1**2)
 
+    def test_block_error_inflation(self):
+        # the decoherence sim's grid: blocks 0-2 form the low band and
+        # blocks 3-7 the high band, 16 MHz each
+        freqs = 60e6 + np.arange(256) * 0.5e6
+        kwargs = dict(nchans_per_block=32, **DECO_KWARGS)
+        flags = np.zeros((4, 256), dtype=bool)
+        # t=1: block 6 flagged, cutting block 7 off at the top of its band
+        flags[1, 192:224] = True
+        # t=2: block 1 flagged but for its 2 channels next to block 2,
+        # which also strands block 0 at the bottom of the band
+        flags[2, 32:62] = True
+        # t=3: too few low-band channels left for the smooth fit
+        flags[3, :93] = True
+        inflation = skycal.block_error_inflation(flags, freqs, **kwargs)
+        assert inflation.shape == (4, 8)
+        np.testing.assert_allclose(inflation[0], 1.0)
+        assert inflation[1, 6] == np.inf
+        assert inflation[1, 7] > 100
+        assert np.all(inflation[1, 3:6] < 2)
+        assert inflation[2, 0] > 100
+        assert inflation[2, 1] < 2.5   # a remnant still touching block 2
+        np.testing.assert_array_equal(inflation[3, :3], np.inf)
+        np.testing.assert_allclose(inflation[3, 3:], 1.0)
+        # flags can only remove information
+        assert np.all(inflation[np.isfinite(inflation)] >= 1 - 1e-10)
+        # a block outside both bands has no error to inflate
+        flags = np.zeros((1, 256), dtype=bool)
+        flags[:, 224:] = True
+        inflation = skycal.block_error_inflation(flags, freqs, **kwargs)
+        assert np.isnan(inflation[0, 7])
+        np.testing.assert_allclose(inflation[0, :7], 1.0)
+
 
 class TestEstimateSNAPDecoherence:
     def test_staircase_recovery(self):
@@ -884,6 +916,36 @@ class TestEstimateSNAPDecoherence:
         assert np.all(np.isnan(meta['log_suppression']['A'][0, :3]))
         # the suppressed high-band block is still recovered
         assert abs(meta['log_suppression']['A'][0, 5] - 0.1) < 0.01
+
+    def test_isolated_block_not_fit(self):
+        # flagging block 6 at the second integration cuts block 7 off at
+        # the top of the high band, leaving its level degenerate with the
+        # smooth model: a fit there could make false detections of any
+        # size, so it must come back NaN wherever block_error_inflation
+        # exceeds the cut
+        nblocks = 8
+        sim = build_decoherence_sim({'A': np.zeros(nblocks),
+                                     'B': np.zeros(nblocks)},
+                                    ntimes=2, seed=14)
+        for key in sim['logamp_wgts']:
+            sim['logamp_wgts'][key][1, 192:224] = 0
+        args = (sim['gains'], sim['logamp_wgts'], sim['ant_to_SNAP_dict'],
+                sim['freqs'])
+        kwargs = dict(nchans_per_block=sim['nchans_per_block'],
+                      **DECO_KWARGS)
+        _, meta = skycal.estimate_SNAP_decoherence(*args, **kwargs)
+        flags = np.all([wgt == 0 for wgt in sim['logamp_wgts'].values()],
+                       axis=0)
+        unfit = ~(skycal.block_error_inflation(flags, sim['freqs'], **kwargs)
+                  <= 5)
+        assert unfit[1, 7] and not unfit[0].any()
+        for SNAP in ['A', 'B']:
+            np.testing.assert_array_equal(
+                np.isnan(meta['log_suppression'][SNAP]), unfit)
+        # without the cut, the stranded block is fit
+        _, meta = skycal.estimate_SNAP_decoherence(
+            *args, max_block_error_inflation=np.inf, **kwargs)
+        assert np.isfinite(meta['log_suppression']['A'][1, 7])
 
     def test_missing_SNAP_or_wgts_raises(self):
         sim = build_decoherence_sim({'A': np.zeros(8), 'B': np.zeros(8)})
@@ -1054,6 +1116,8 @@ class TestCoverageGaps:
         assert abs(log_supp['A'][0, 5] - 0.1) < 0.01
         assert np.all(np.isnan(log_supp['B'][0, :3]))   # dead band
         assert np.isnan(log_supp['B'][0, 6])            # dead block
+        assert np.isnan(log_supp['B'][0, 7])            # stranded by it
+        assert np.isfinite(log_supp['A'][0, 7])
         assert np.all(np.isnan(log_supp['C'][0]))       # no spectra
         assert meta['n_spectra_per_SNAP']['C'][0] == 0
 
