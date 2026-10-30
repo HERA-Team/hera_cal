@@ -272,7 +272,8 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         data: DataContainer of visibilities, including co-polarized autocorrelations
             (ValueError otherwise). Baselines lacking gains or autos are omitted.
         gains: dict mapping (ant, antpol) e.g. (0, 'Jee') to (Ntimes, Nfreqs) complex
-            gain waterfalls. Nonfinite gains are treated as flagged.
+            gain waterfalls. Nonfinite and zero gains, which cannot be divided out, are
+            treated as flagged.
         reds: list of lists of redundant groups (antpairpol tuples) to average, e.g.
             from redcal.get_reds(antpos, pols=pols, include_autos=True). Their
             polarizations govern what is averaged: include 'en'/'ne' groups to average
@@ -337,11 +338,12 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
                          f'polarization it uses (e.g. via redcal.get_reds with include_autos=True), '
                          f'but is missing {sorted(missing_antpols)}.')
 
-    # per-antenna flags (excluded antennas are handled by membership, not flags). if decoherence
-    # is given, correct the staircase out of the gains and precompute per-SNAP suppression and
-    # unmeasured-block waterfalls
-    gain_flags = {ant: (~np.isfinite(g) | ant_flags.get(ant, False)) for ant, g in gains.items()}
-    finite_gains = {ant: np.where(np.isfinite(g), g, 1) for ant, g in gains.items()}
+    # per-antenna flags (excluded antennas are handled by membership, not flags), including
+    # nonfinite and zero gains, which are replaced by 1 so that calibrating never makes inf or nan.
+    # if decoherence is given, correct the staircase out of the gains and precompute per-SNAP
+    # suppression and unmeasured-block waterfalls
+    gain_flags = {ant: (~np.isfinite(g) | (g == 0) | ant_flags.get(ant, False)) for ant, g in gains.items()}
+    finite_gains = {ant: np.where(np.isfinite(g) & (g != 0), g, 1) for ant, g in gains.items()}
     if snap_decoherence is not None:
         finite_gains = snap_decoherence.correct_gains(finite_gains, flags=gain_flags)
         ant_to_SNAP = snap_decoherence.ant_to_SNAP_dict
@@ -418,8 +420,10 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
             calibrate_in_place(cal_group, finite_gains)
         binary = [(~_bl_flags(bl)).astype(float) for bl in members]
         wgt_sum = np.sum(binary, axis=0)
+        # here and below, flagged cells are left out of sums by selection rather than by a zero
+        # weight, so nothing they hold can reach an average (0 * inf = nan)
         with np.errstate(all='ignore'):
-            avg = np.sum([b * cal_group[bl] for b, bl in zip(binary, members)], axis=0) \
+            avg = np.sum([np.where(b > 0, cal_group[bl], 0) for b, bl in zip(binary, members)], axis=0) \
                   / np.where(wgt_sum > 0, wgt_sum, 1)
         avg = np.where(wgt_sum > 0, avg, 0)
         key = members[0]
@@ -431,8 +435,8 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         if effective_nsamples:
             # uniform weighting of per-antenna auto noise: Var = sum(P_k) / (n^2 dt df) with P_k
             # each antenna's co-polarized auto product, so n_eff = n^2 Abar_i Abar_j / sum(P_k)
-            product_sum = np.sum([b * np.abs(cal_autos[utils.join_bl((bl[0], antpol_i), (bl[0], antpol_i))]
-                                             * cal_autos[utils.join_bl((bl[0], antpol_j), (bl[0], antpol_j))])
+            product_sum = np.sum([np.where(b > 0, np.abs(cal_autos[utils.join_bl((bl[0], antpol_i), (bl[0], antpol_i))]
+                                                         * cal_autos[utils.join_bl((bl[0], antpol_j), (bl[0], antpol_j))]), 0)
                                   for b, bl in zip(binary, members)], axis=0)
             with np.errstate(all='ignore'):
                 red_avg_nsamples[key] = np.where(product_sum > 0,
@@ -470,7 +474,7 @@ def calibrate_and_red_avg(data, gains, reds, ant_flags=None, ex_ants=None, data_
         # inverse-variance weighted average of this group
         wgt_sum = np.sum([group_wgts[bl] for bl in group_bls], axis=0)
         with np.errstate(all='ignore'):
-            avg = np.sum([group_wgts[bl] * group_data[bl] for bl in group_bls], axis=0) \
+            avg = np.sum([np.where(group_wgts[bl] > 0, group_wgts[bl] * group_data[bl], 0) for bl in group_bls], axis=0) \
                   / np.where(wgt_sum > 0, wgt_sum, 1)
         avg = np.where(wgt_sum > 0, avg, 0)
         key = group_bls[0]

@@ -876,6 +876,44 @@ class TestCalibrateAndRedAvg:
         np.testing.assert_array_equal(nsamples[red[0]][0, :10], len(red) - 1)
         np.testing.assert_array_equal(nsamples[red[0]][0, 10:], len(red))
 
+    def test_flagged_values_never_reach_averages(self):
+        # an antenna flagged everywhere still joins the autocorrelation average with zero weight;
+        # whatever its gains hold (here exact zeros, which made inf calibrated autos and, through
+        # 0 * inf, nan averages and effective nsamples) must not change any result
+        sim = build_red_avg_sim()
+        all_flagged = {(2, 'Jee'): np.ones((sim['ntimes'], sim['nfreqs']), dtype=bool)}
+        zero_gains = dict(sim['gains'])
+        zero_gains[(2, 'Jee')] = np.where(np.arange(sim['nfreqs']) < 20, 0, sim['gains'][(2, 'Jee')])
+        unit_gains = dict(sim['gains'])
+        unit_gains[(2, 'Jee')] = np.ones_like(sim['gains'][(2, 'Jee')])
+        (avg, flags, nsamples, _), (avg_ref, flags_ref, nsamples_ref, _) = [
+            ac.calibrate_and_red_avg(sim['data'], gains, sim['reds'], ant_flags=all_flagged, dt=sim['dt'], df=sim['df'])
+            for gains in (zero_gains, unit_gains)]
+        for key in avg_ref:
+            assert np.all(np.isfinite(avg[key])) and np.all(np.isfinite(nsamples[key]))
+            np.testing.assert_array_equal(avg[key], avg_ref[key])
+            np.testing.assert_array_equal(flags[key], flags_ref[key])
+            np.testing.assert_array_equal(nsamples[key], nsamples_ref[key])
+
+    def test_zero_gains_flagged_like_nonfinite(self):
+        # a zero gain cannot be divided out, so an unflagged one must act exactly like a nan
+        sim = build_red_avg_sim()
+        results = []
+        for bad_value in (0, np.nan):
+            gains = dict(sim['gains'])
+            gains[(3, 'Jee')] = gains[(3, 'Jee')].copy()
+            gains[(3, 'Jee')][1, 5:25] = bad_value
+            results.append(ac.calibrate_and_red_avg(sim['data'], gains, sim['reds'], dt=sim['dt'], df=sim['df']))
+        (avg, flags, nsamples, meta), (avg_ref, flags_ref, nsamples_ref, meta_ref) = results
+        for key in avg_ref:
+            np.testing.assert_array_equal(avg[key], avg_ref[key])
+            np.testing.assert_array_equal(nsamples[key], nsamples_ref[key])
+        for ant in meta_ref['chisq_per_ant']:
+            np.testing.assert_array_equal(meta['chisq_per_ant'][ant], meta_ref['chisq_per_ant'][ant])
+        # and groups containing antenna 3 lose it at those cells
+        red = [r for r in sim['reds'] if (3, 4, 'ee') in r][0]
+        assert np.all(nsamples[red[0]][1, 5:25] < nsamples[red[0]][0, 5:25])
+
     def test_data_flags(self):
         sim = build_red_avg_sim()
         # flag (and corrupt) some cells of one baseline, and flag some cells of one auto
