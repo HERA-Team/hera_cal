@@ -914,6 +914,31 @@ class TestCalibrateAndRedAvg:
         red = [r for r in sim['reds'] if (3, 4, 'ee') in r][0]
         assert np.all(nsamples[red[0]][1, 5:25] < nsamples[red[0]][0, 5:25])
 
+    def test_flagged_nonfinite_data_never_reach_results(self):
+        # inf and nan visibilities where an antenna is flagged (here in its autocorrelation, which joins the
+        # autocorrelation average with zero weight there) and where a cross-correlation is data-flagged must
+        # give exactly the averages, effective nsamples, and chi^2 that finite values there give
+        sim = build_red_avg_sim()
+        shape = (sim['ntimes'], sim['nfreqs'])
+        ant_flags = {(2, 'Jee'): np.zeros(shape, dtype=bool)}
+        ant_flags[(2, 'Jee')][0, 10:20] = True
+        data_flags = DataContainer({bl: np.zeros(shape, dtype=bool) for bl in sim['data']})
+        data_flags[(0, 1, 'ee')][1, 30:40] = True
+        corrupted = deepcopy(sim['data'])
+        corrupted[(2, 2, 'ee')][0, 10:20] = np.where(np.arange(10) % 2, np.inf, np.nan)
+        corrupted[(0, 1, 'ee')][1, 30:40] = np.where(np.arange(10) % 2, np.inf, np.nan)
+        (avg, flags, nsamples, meta), (avg_ref, flags_ref, nsamples_ref, meta_ref) = [
+            ac.calibrate_and_red_avg(data, sim['gains'], sim['reds'], ant_flags=ant_flags, data_flags=data_flags,
+                                     dt=sim['dt'], df=sim['df'])
+            for data in (corrupted, sim['data'])]
+        for key in avg_ref:
+            np.testing.assert_array_equal(avg[key], avg_ref[key])
+            np.testing.assert_array_equal(flags[key], flags_ref[key])
+            np.testing.assert_array_equal(nsamples[key], nsamples_ref[key])
+        for name in ['chisq_per_ant', 'total_chisq', 'chisq_per_bl']:
+            for key in meta_ref[name]:
+                np.testing.assert_array_equal(meta[name][key], meta_ref[name][key])
+
     def test_data_flags(self):
         sim = build_red_avg_sim()
         # flag (and corrupt) some cells of one baseline, and flag some cells of one auto
