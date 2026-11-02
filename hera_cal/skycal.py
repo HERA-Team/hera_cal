@@ -1342,14 +1342,19 @@ def _project_out_smooth(vals, wgts, band_slices, dpss_bases):
         # weighted least squares via the (Nmodes, Nmodes) normal equations
         # rather than an SVD of the full (Nchans, Nmodes) design — the same
         # strategy as hera_filters' 'dpss_solve'/'dpss_matrix' modes, ~5x
-        # faster at these shapes. lstsq (rather than solve) tolerates a
-        # numerically singular Gram matrix by returning minimum-norm
-        # coefficients, which leave the residual on weighted channels
-        # unaffected.
+        # faster at these shapes. A pseudo-inverse (rather than solve)
+        # tolerates a numerically singular Gram matrix by returning
+        # minimum-norm coefficients, which leave the residual on weighted
+        # channels unaffected; its cutoff is np.linalg.lstsq's default.
+        # hermitian=True computes it from the eigendecomposition of the
+        # (symmetric) Gram matrix: LAPACK's divide-and-conquer SVD, used by
+        # both pinv and lstsq otherwise, has failed to converge on a
+        # well-conditioned DPSS normal matrix.
         wgt_band = wgts[band]
         gram = basis.T @ (basis * wgt_band[:, None])
         proj = basis.T @ (wgt_band[:, None] * vals2[band])
-        coeffs, *_ = np.linalg.lstsq(gram, proj, rcond=None)
+        coeffs = np.linalg.pinv(gram, rcond=len(gram) * np.finfo(float).eps,
+                                hermitian=True) @ proj
         resid[band] = vals2[band] - basis @ coeffs
     return resid.reshape(vals.shape)
 
@@ -1916,7 +1921,7 @@ def estimate_SNAP_decoherence(gains, logamp_wgts, ant_to_SNAP_dict,
             active_idx = np.where(support)[0]
             if len(active_idx) > 0:
                 inv_active = np.linalg.pinv(
-                    normal_mat[np.ix_(active_idx, active_idx)])
+                    normal_mat[np.ix_(active_idx, active_idx)], hermitian=True)
                 ripple_mat = np.zeros((len(active_idx), len(active_idx)))
                 for bi, band in enumerate(band_slices):
                     tapered = acf_by_band.get(bi)
