@@ -229,7 +229,8 @@ class Test_ReflectionFitter_Cables(object):
         RF2 = RF.soft_copy()
         assert RF2.__class__ == reflections.ReflectionFitter
 
-    def test_write_auto_reflections(self):
+    def test_write_auto_reflections(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
         RF = reflections.ReflectionFitter(self.uvd)
         bl_k = (23, 23, 'ee')
         a_k = (23, 'Jee')
@@ -312,7 +313,8 @@ class Test_ReflectionFitter_Cables(object):
         a = parser.parse_args()
         assert not a.write_each_calfits
 
-    def test_auto_reflection_run(self):
+    def test_auto_reflection_run(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
         # most of the code tests have been done above, this is just to ensure this wrapper function runs
         uvd = simulate_reflections(cdelay=[150.0, 250.0], cphase=[0.0, 0.0], camp=[1e-2, 1e-2], add_cable=True, cable_ants=[23], add_xtalk=False)
         reflections.auto_reflection_run(uvd, [(100, 200), (200, 300)], "./ex.calfits", time_avg=True, compress_tavg_calfits=True,
