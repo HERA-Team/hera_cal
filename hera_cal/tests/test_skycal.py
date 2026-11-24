@@ -1079,7 +1079,7 @@ class TestCoverageGaps:
         vis = vis + 0.5 * (rng.normal(size=vis.shape)
                            + 1j * rng.normal(size=vis.shape)) / np.sqrt(2)
         wgts = 10.0 ** rng.uniform(0, 4, size=vis.shape)
-        with pytest.raises(RuntimeError, match='diverged'):
+        with pytest.raises(RuntimeError, match=r'[1-9]\d* diverged'):
             skycal._refine_gains_single_pol_time(vis, wgts, ant_i, ant_j,
                                                  nants, fallback_maxiter=0)
         # the fallback (on by default) solves the channel Gauss-Newton cannot
@@ -1323,9 +1323,9 @@ class TestDivergentChannelTolerance:
         touches_0 = np.where(ant_i == 0)[0]
         for c in [2, 5, 9, 13]:
             wrecked[touches_0[::2], c] *= -1e6
-        # 1/16 of channels allowed, 4 fail (without the fallback, Gauss-Newton's
-        # divergence raises at once; with it, after the fallback fails them too)
-        with pytest.raises(RuntimeError, match='diverged'):
+        # 1/16 of channels allowed, 4 fail: Gauss-Newton diverges on them, and
+        # the fallback (on by default) cannot converge them either
+        with pytest.raises(RuntimeError, match=r'[1-9]\d* diverged'):
             skycal._refine_gains_single_pol_time(wrecked, wgts, ant_i, ant_j, nants,
                                                  max_divergent_chan_frac=1 / 16,
                                                  fallback_maxiter=0)
