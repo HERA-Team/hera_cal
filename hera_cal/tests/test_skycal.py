@@ -415,7 +415,8 @@ class TestRefineGainsCore:
             noise=0.3)
         with pytest.raises(RuntimeError):
             skycal._refine_gains_single_pol_time(
-                vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=0)
+                vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=0,
+                fallback_maxiter=0)
 
     def test_mean_phase_degeneracy_fixing(self):
         true_h, vis_ratio, wgts, ant_i, ant_j, nants = self._setup_arrays(
@@ -1080,7 +1081,15 @@ class TestCoverageGaps:
         wgts = 10.0 ** rng.uniform(0, 4, size=vis.shape)
         with pytest.raises(RuntimeError, match='diverged'):
             skycal._refine_gains_single_pol_time(vis, wgts, ant_i, ant_j,
-                                                 nants)
+                                                 nants, fallback_maxiter=0)
+        # the fallback (on by default) solves the channel Gauss-Newton cannot
+        gains, meta = skycal._refine_gains_single_pol_time(vis, wgts, ant_i,
+                                                           ant_j, nants)
+        assert len(meta['fallback_chans']) > 0
+        assert len(meta['divergent_chans']) == 0
+        assert np.all(np.isfinite(gains))
+        assert np.all(meta['conv_crit'] < 1e-7)
+        assert np.all(meta['iter'][meta['fallback_chans']] > 0)
 
     def test_sky_calibrate_infers_freqs(self):
         sim = build_sim(nants=5, nfreqs=32, ntimes=1, seed=5)
@@ -1274,11 +1283,11 @@ class TestDivergentChannelTolerance:
         # refine_maxiter=0 fails every channel: intolerable by default...
         with pytest.raises(RuntimeError, match='did not converge'):
             skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i, ant_j, nants,
-                                                 refine_maxiter=0)
+                                                 refine_maxiter=0, fallback_maxiter=0)
         # ...but tolerated in full, and every failed channel comes back nan
         gains, meta = skycal._refine_gains_single_pol_time(
             vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=0,
-            max_divergent_chan_frac=1.0)
+            fallback_maxiter=0, max_divergent_chan_frac=1.0)
         assert np.all(np.isnan(gains))
         np.testing.assert_array_equal(meta['divergent_chans'], np.arange(vis_ratio.shape[1]))
 
@@ -1314,8 +1323,13 @@ class TestDivergentChannelTolerance:
         touches_0 = np.where(ant_i == 0)[0]
         for c in [2, 5, 9, 13]:
             wrecked[touches_0[::2], c] *= -1e6
-        # 1/16 of channels allowed, 4 fail
+        # 1/16 of channels allowed, 4 fail (without the fallback, Gauss-Newton's
+        # divergence raises at once; with it, after the fallback fails them too)
         with pytest.raises(RuntimeError, match='diverged'):
+            skycal._refine_gains_single_pol_time(wrecked, wgts, ant_i, ant_j, nants,
+                                                 max_divergent_chan_frac=1 / 16,
+                                                 fallback_maxiter=0)
+        with pytest.raises(RuntimeError, match='did not converge'):
             skycal._refine_gains_single_pol_time(wrecked, wgts, ant_i, ant_j, nants,
                                                  max_divergent_chan_frac=1 / 16)
         gains, meta = skycal._refine_gains_single_pol_time(
@@ -1387,6 +1401,86 @@ class TestDivergentChannelTolerance:
         assert 'divergent_chans' in meta
         for key, chans in meta['divergent_chans'].items():
             assert len(chans) == 0  # clean sim: nothing should fail
+        assert set(meta['fallback_chans']) == set(meta['divergent_chans'])
+        for key, chans in meta['fallback_chans'].items():
+            assert len(chans) == 0  # ...nor need the fallback
+
+
+class TestRefinementFallback:
+    '''Tests for the fallback that re-solves the channels Gauss-Newton cannot
+    (_alternating_gain_updates). Which channels Gauss-Newton fails can depend
+    on rounding near its instability, so these force the fallback with
+    refine_maxiter=0 (which leaves every channel to it) or test properties
+    that hold whichever solver finished a channel.'''
+
+    def _arrays(self, seed=0, nants=14, nfreqs=32, sigma=0.3, decorrelated=None):
+        '''Random gains and noisy visibilities; antenna `decorrelated` keeps
+        none of its signal, so its gain is undetermined in every channel.'''
+        rng = np.random.default_rng(seed)
+        true_h = ((1.0 + 0.2 * rng.uniform(-1, 1, (nants, nfreqs)))
+                  * np.exp(1j * 0.3 * rng.uniform(-1, 1, (nants, nfreqs))))
+        bls = [(i, j) for i in range(nants) for j in range(i + 1, nants)]
+        ant_i = np.array([bl[0] for bl in bls])
+        ant_j = np.array([bl[1] for bl in bls])
+        vis_ratio = true_h[ant_i] * np.conj(true_h[ant_j])
+        if decorrelated is not None:
+            vis_ratio[(ant_i == decorrelated) | (ant_j == decorrelated)] = 0
+        vis_ratio = vis_ratio + sigma * (rng.normal(size=vis_ratio.shape)
+                                         + 1j * rng.normal(size=vis_ratio.shape)) / np.sqrt(2)
+        wgts = np.full(vis_ratio.shape, sigma**-2)
+        return vis_ratio, wgts, ant_i, ant_j, nants
+
+    def test_matches_gauss_newton(self):
+        '''Where both converge, the fallback reaches Gauss-Newton's solution,
+        with the same phase degeneracy convention.'''
+        vis_ratio, wgts, ant_i, ant_j, nants = self._arrays(sigma=0.02)
+        gauss_newton, gn_meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants)
+        assert len(gn_meta['fallback_chans']) == 0
+        fallback, fb_meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=0)
+        np.testing.assert_array_equal(fb_meta['fallback_chans'], np.arange(vis_ratio.shape[1]))
+        assert len(fb_meta['divergent_chans']) == 0
+        assert np.all(fb_meta['conv_crit'] < 1e-7)
+        np.testing.assert_allclose(fallback, gauss_newton, rtol=0, atol=1e-6)
+
+    @pytest.mark.parametrize('refine_maxiter', [100, 0])
+    def test_decorrelated_antenna(self, refine_maxiter):
+        '''An antenna with no signal left (its gain undetermined, as for a
+        decorrelated antenna in real data) neither fails a channel nor moves the
+        other antennas' gains by more than a small fraction of their noise.'''
+        sigma = 0.3
+        vis_ratio, wgts, ant_i, ant_j, nants = self._arrays(sigma=sigma, decorrelated=0)
+        gains, meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=refine_maxiter)
+        assert len(meta['divergent_chans']) == 0
+        assert np.all(np.isfinite(gains))
+        assert np.all(meta['conv_crit'] < 1e-7)
+        if refine_maxiter == 0:
+            np.testing.assert_array_equal(meta['fallback_chans'], np.arange(vis_ratio.shape[1]))
+        # the same solve without antenna 0
+        keep = (ant_i != 0) & (ant_j != 0)
+        without, _ = skycal._refine_gains_single_pol_time(
+            vis_ratio[keep], wgts[keep], ant_i[keep] - 1, ant_j[keep] - 1, nants - 1)
+        others = gains[1:] * np.exp(-1j * np.angle(np.mean(gains[1:] / np.abs(gains[1:]), axis=0)))
+        without *= np.exp(-1j * np.angle(np.mean(without / np.abs(without), axis=0)))
+        gain_noise = sigma / np.sqrt(nants - 2)  # each gain's noise, relative to |g| ~ 1
+        assert np.max(np.abs(others - without)) < 0.1 * gain_noise
+
+    def test_exhausted_fallback_fails(self):
+        '''Channels the fallback cannot converge within fallback_maxiter fail
+        as before: an error by default, np.nan if tolerated.'''
+        vis_ratio, wgts, ant_i, ant_j, nants = self._arrays()
+        with pytest.raises(RuntimeError, match='fallback rounds'):
+            skycal._refine_gains_single_pol_time(vis_ratio, wgts, ant_i, ant_j, nants,
+                                                 refine_maxiter=0, fallback_maxiter=1)
+        gains, meta = skycal._refine_gains_single_pol_time(
+            vis_ratio, wgts, ant_i, ant_j, nants, refine_maxiter=0, fallback_maxiter=1,
+            max_divergent_chan_frac=1.0)
+        assert np.all(np.isnan(gains))
+        np.testing.assert_array_equal(meta['divergent_chans'], np.arange(vis_ratio.shape[1]))
+        assert len(meta['fallback_chans']) == 0
+        np.testing.assert_array_equal(meta['iter'], -1)
 
 
 class TestExpandSkyGains:

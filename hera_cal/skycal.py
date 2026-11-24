@@ -666,10 +666,93 @@ def _relative_chi2_gradient(vis_ratio, ratio_wgts, full_gains, ant_i_idx,
     return per_chan
 
 
+def _alternating_gain_updates(cell_ratio, cell_wgts, sel_i, sel_j, inc_i, inc_j,
+                              init_gains, tol, maxiter):
+    '''The fallback for channels that Gauss-Newton cannot solve (see
+    _refine_gains_single_pol_time): alternating updates of the complex gains
+    themselves, as in StEFCal (Salvini & Wijnholds 2014, A&A 571, A97). Each
+    round sets every antenna's gain to the weighted projection of its data onto
+    the other antennas' gains,
+
+        g_i <- sum_j(w_ij * z_ij * g_j) / sum_j(w_ij * |g_j|^2),
+
+    averaging with the previous gains every other round to damp oscillation.
+    Gauss-Newton works in log-amplitude and phase, which break down as an
+    antenna's gain approaches zero (log|g| runs off and its phase becomes
+    undefined), and that is how it fails when one antenna's gain is barely
+    determined in a channel. These updates stay well defined there. Each round's
+    undamped update is exactly the relative chi^2 gradient that
+    _relative_chi2_gradient reports, so a channel converges when its largest
+    falls below tol. The overall phase is then fixed as Gauss-Newton fixes it:
+    the mean over antennas of each gain's phase change from init_gains is set to
+    0 (the same convention unless an antenna's phase moved by more than pi).
+
+    Arguments:
+        cell_ratio, cell_wgts: (Nbls, Nchans) data/model ratios and weights of
+            the participating baselines, as in _refine_gains_single_pol_time
+        sel_i, sel_j, inc_i, inc_j: each baseline's two antennas among the
+            participating ones, and their _antenna_incidence matrices
+        init_gains: (nsel, Nchans) starting gains
+        tol: convergence threshold on the largest relative chi^2 gradient
+        maxiter: maximum number of rounds
+
+    Returns:
+        gains: (nsel, Nchans) ndarray of gains
+        iters: (Nchans,) int ndarray of the rounds each channel used
+        converged: (Nchans,) bool ndarray, False where a channel did not
+            converge within maxiter rounds or went non-finite
+    '''
+    gains = init_gains.copy()
+    nchans = gains.shape[1]
+    # a channel whose starting gains are not all finite never starts, and counts as unconverged
+    active = np.all(np.isfinite(gains), axis=0)
+    converged = np.zeros(nchans, dtype=bool)
+    iters = np.zeros(nchans, dtype=int)
+    wgtd_ratio = cell_wgts * cell_ratio
+    for niter in range(1, maxiter + 1):
+        # only channels still iterating are updated, so converged ones cost nothing
+        idx = np.where(active)[0]
+        if len(idx) == 0:
+            break
+        gains_here = gains[:, idx]
+        gi, gj = gains_here[sel_i], gains_here[sel_j]
+        with np.errstate(over='ignore', invalid='ignore', divide='ignore'):
+            # z_ij ~ g_i conj(g_j), so each baseline predicts its first antenna's gain through
+            # z_ij g_j ~ g_i |g_j|^2 and its second's through conj(z_ij) g_i ~ g_j |g_i|^2;
+            # the incidence matrices sum those over each antenna's baselines
+            numerator = (inc_i @ (wgtd_ratio[:, idx] * gj)
+                         + inc_j @ (np.conj(wgtd_ratio[:, idx]) * gi))
+            denominator = (inc_i @ (cell_wgts[:, idx] * np.abs(gj)**2)
+                           + inc_j @ (cell_wgts[:, idx] * np.abs(gi)**2))
+            # every antenna is updated at once, from the previous round's gains
+            new_gains = numerator / denominator
+            # the undamped step relative to each gain is the relative chi^2 gradient
+            # (as in _relative_chi2_gradient), so convergence is judged before damping
+            rel_gradient = np.max(np.abs(new_gains - gains_here)
+                                  / np.abs(gains_here), axis=0)
+        if niter % 2 == 0:
+            # undamped updates can bounce between two states; averaging every other
+            # round damps that, as in StEFCal
+            new_gains = (new_gains + gains_here) / 2
+        gains[:, idx] = new_gains
+        iters[idx] = niter
+        # a channel whose gains went non-finite stops, unconverged
+        diverged = ~np.all(np.isfinite(new_gains), axis=0)
+        done = (rel_gradient < tol) & ~diverged
+        converged[idx[done]] = True
+        active[idx[done | diverged]] = False
+    # the solution is defined only up to one overall phase per channel: fix it as
+    # Gauss-Newton does, by zeroing the mean phase change from init_gains
+    with np.errstate(invalid='ignore'):
+        phase_change = np.angle(gains / init_gains)
+    gains *= np.exp(-1j * phase_change.mean(axis=0))[None, :]
+    return gains, iters, converged
+
+
 def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                                   nants, refine_tol=1e-8,
                                   refine_maxiter=100, sync_tol=1e-3,
-                                  sync_maxiter=200,
+                                  sync_maxiter=200, fallback_maxiter=20000,
                                   max_divergent_chan_frac=0.0, verbose=False):
     '''Solve for per-antenna, per-channel complex gains g such that
     vis_ratio ~ g_i * conj(g_j) on each baseline, for a single
@@ -697,6 +780,15 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
            Both are solved exactly each round; iterating drives the
            linearization error to zero. Channels whose largest update falls
            below refine_tol drop out of the batch early.
+        3. Fallback: channels that diverge or exhaust refine_maxiter are
+           solved again from the initialization by alternating updates of the
+           complex gains themselves (_alternating_gain_updates). Gauss-Newton
+           fails when one antenna's gain is barely determined in a channel:
+           its least-squares amplitude can lie near zero, where log|g| runs
+           off and its phase is undefined. The alternating updates stay well
+           defined there and converge to the same stationary point wherever
+           both converge, but take several times more rounds, so they are
+           used only where Gauss-Newton fails.
 
     Relation to redcal's estimators and the logcal bias: only the
     initialization is logcal-like. Linearizing g_i * conj(g_j) shows that
@@ -723,8 +815,9 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
     update by setting its mean phase to 0 over participating antennas — the
     same convention as redcal.remove_degen_gains. Each channel converges
     when its largest update falls below refine_tol; channels that diverge
-    or exhaust refine_maxiter fail, raising a RuntimeError if more fail
-    than max_divergent_chan_frac allows. The maximum relative chi^2
+    or exhaust refine_maxiter go to the fallback, and those it cannot
+    converge within fallback_maxiter rounds fail, raising a RuntimeError if
+    more fail than max_divergent_chan_frac allows. The maximum relative chi^2
     gradient over ALL solved cells (_relative_chi2_gradient) is then
     computed as an independent check on the solution and reported in
     meta['conv_crit'].
@@ -747,8 +840,16 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         sync_tol: convergence threshold (radians) for the phase
             synchronization initialization (see _phase_sync_init)
         sync_maxiter: iteration cap for the phase synchronization
+        fallback_maxiter: maximum number of rounds of the fallback for
+            channels Gauss-Newton cannot solve (_alternating_gain_updates);
+            0 turns the fallback off. Each channel stops as soon as it
+            converges, so the cap costs nothing for channels that do; it is
+            set far above the ~1000 rounds that slowly converging channels
+            (sparse or weakly connected graphs) can need, so that reaching it
+            means a channel will not converge.
         max_divergent_chan_frac: fraction of channels allowed to fail
-            (diverge or exhaust refine_maxiter) and come back as np.nan
+            (diverge or exhaust refine_maxiter, and then fallback_maxiter)
+            and come back as np.nan
             instead of raising an error. Default 0.0 requires all to
             converge; a small allowance lets coarse antenna-exclusion
             rounds, which take a median over channels, proceed to remove
@@ -759,10 +860,13 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         gains: complex ndarray (nants, Nfreqs); np.nan where unsolved
         meta: dict of per-channel (Nfreqs,) arrays, following redcal's
             solve_iteratively convention: 'iter' (rounds each channel
-            used before its early exit; 0 where flagged, -1 where it
-            failed) and 'conv_crit' (max relative chi^2 gradient over
-            antennas in each channel; np.nan where flagged or failed),
-            plus 'divergent_chans', the indices of the failed channels
+            used before its early exit, counting the fallback's rounds
+            for channels it solved; 0 where flagged, -1 where it failed)
+            and 'conv_crit' (max relative chi^2 gradient over antennas in
+            each channel; np.nan where flagged or failed), plus
+            'divergent_chans', the indices of the failed channels, and
+            'fallback_chans', the indices of the channels the fallback
+            solved
 
     Raises:
         ValueError: if max_divergent_chan_frac is not between 0 and 1, if
@@ -873,7 +977,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             newly_failed = active_idx[bad.any(axis=0)]
             failed_chans[newly_failed] = True
             active_chans[newly_failed] = False
-            if failed_chans.sum() > max_failed:
+            if fallback_maxiter == 0 and failed_chans.sum() > max_failed:
                 raise RuntimeError(
                     'Per-channel gain refinement diverged: non-finite gains or '
                     f'weights in round {niter} at {int(failed_chans.sum())} channels '
@@ -917,6 +1021,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         with np.errstate(over='ignore', invalid='ignore'):
             gains[:, batch] = gains_here * np.exp(delta_logamp.T
                                                   + 1j * delta_phase.T)
+        if niter == 0:
+            init_gains = gains.copy()  # where the fallback starts
 
         # channels whose largest update is below tolerance are converged
         # and drop out of subsequent rounds; record the rounds each used
@@ -927,9 +1033,24 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             active_chans[dropped] = False
             chan_iters[good_chan_idx[dropped]] = niter + 1
         niter += 1
-    # channels still active exhausted refine_maxiter: they fail too
+    # channels still active exhausted refine_maxiter: they fail too, unless
+    # the fallback solves them (or the ones that diverged)
     unconverged = active_chans.copy()
     failed_chans |= unconverged
+    fallback_chans = np.zeros(nchans, dtype=bool)
+    if fallback_maxiter > 0 and failed_chans.any():
+        retry = np.where(failed_chans)[0]
+        retry_gains, retry_iters, solved = _alternating_gain_updates(
+            cell_ratio[:, retry], cell_wgts[:, retry], sel_i, sel_j, inc_i,
+            inc_j, init_gains[:, retry], refine_tol, fallback_maxiter)
+        rescued = retry[solved]
+        gains[:, rescued] = retry_gains[:, solved]
+        chan_iters[good_chan_idx[rescued]] = retry_iters[solved]
+        fallback_chans[rescued] = True
+        failed_chans[rescued] = False
+        unconverged[rescued] = False
+        utils.echo(f'The fallback solved {len(rescued)} of the {len(retry)} '
+                   'channels Gauss-Newton could not.', verbose=verbose)
 
     # embed into the full (antenna, channel) grid, blanking failed channels
     # first so nothing downstream ever sees a partial solution
@@ -946,18 +1067,21 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                  else np.nan)
         raise RuntimeError(
             f'Per-channel gain refinement did not converge: '
-            f'{int(unconverged.sum())} channels remain above '
-            f'refine_tol={refine_tol} after {refine_maxiter} rounds '
-            f'{good_chan_idx[unconverged].tolist()} '
-            f'(max relative chi^2 gradient over solved channels {worst:.2e}). '
+            f'{int(failed_chans.sum())} channels failed '
+            f'{good_chan_idx[failed_chans].tolist()} '
+            f'({int(unconverged.sum())} still above refine_tol={refine_tol} '
+            f'after {refine_maxiter} rounds'
+            + (f' and {fallback_maxiter} fallback rounds' if fallback_maxiter > 0 else '')
+            + f'; max relative chi^2 gradient over solved channels {worst:.2e}). '
             'Do not proceed with unconverged gains.')
     return full_gains, {'iter': chan_iters, 'conv_crit': conv_crit,
-                        'divergent_chans': good_chan_idx[failed_chans]}
+                        'divergent_chans': good_chan_idx[failed_chans],
+                        'fallback_chans': good_chan_idx[fallback_chans]}
 
 
 def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                  refine_tol=1e-8, refine_maxiter=100,
-                 sync_tol=1e-3, sync_maxiter=200,
+                 sync_tol=1e-3, sync_maxiter=200, fallback_maxiter=20000,
                  max_divergent_chan_frac=0.0, verbose=False):
     '''Solve for per-antenna, per-channel refined gains on cross baselines,
     given starting gains g0. The data/model ratio divided by g0_i g0_j^* should
@@ -978,7 +1102,8 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
             ends up in the solve (raises ValueError otherwise); if None, all
             cross baselines participate.
         refine_tol, refine_maxiter, sync_tol, sync_maxiter,
-            max_divergent_chan_frac: see _refine_gains_single_pol_time
+            fallback_maxiter, max_divergent_chan_frac: see
+            _refine_gains_single_pol_time
         verbose: print statements if True
 
     Returns:
@@ -1008,7 +1133,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                              'must be mapped to SNAPs if any are.')
 
     refined_gains = {}
-    meta = {'iter': {}, 'conv_crit': {}, 'divergent_chans': {}}
+    meta = {'iter': {}, 'conv_crit': {}, 'divergent_chans': {}, 'fallback_chans': {}}
     for pol in sorted({bl[2] for bl in bls}):
         antpol = utils.split_pol(pol)[0]
         bls_here = [bl for bl in bls if bl[2] == pol
@@ -1045,7 +1170,7 @@ def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                 vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx, nants,
                 refine_tol=refine_tol,
                 refine_maxiter=refine_maxiter, sync_tol=sync_tol,
-                sync_maxiter=sync_maxiter,
+                sync_maxiter=sync_maxiter, fallback_maxiter=fallback_maxiter,
                 max_divergent_chan_frac=max_divergent_chan_frac,
                 verbose=verbose)
             utils.echo(f't{tind} {pol}: {int(meta_here["iter"].max())} '
@@ -1068,8 +1193,8 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
                   ant_flags=None, auto_flags=None, ant_to_SNAP_dict=None,
                   freqs=None, bls=None, dt=None, df=None, noise_excess=1.0,
                   refine_tol=1e-8, refine_maxiter=100, sync_tol=1e-3,
-                  sync_maxiter=200, max_divergent_chan_frac=0.0,
-                  verbose=False):
+                  sync_maxiter=200, fallback_maxiter=20000,
+                  max_divergent_chan_frac=0.0, verbose=False):
     '''Run the full staged sky-model-based calibration: data/model ratio →
     firstcal delays and offsets → autocorrelation-based amplitudes → per-channel
     refinement on (inter-SNAP) cross baselines. Returns gains g = g0 * refined,
@@ -1097,8 +1222,8 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
         df: channel width in Hz (default: inferred from autos)
         noise_excess: as in build_data_model_ratio. It scales meta['wgts'] (and so
             any chi^2 built from them) but not the gains.
-        refine_tol, refine_maxiter, sync_tol, sync_maxiter:
-            see _refine_gains_single_pol_time
+        refine_tol, refine_maxiter, sync_tol, sync_maxiter, fallback_maxiter,
+            max_divergent_chan_frac: see _refine_gains_single_pol_time
         verbose: print statements if True
 
     Returns:
@@ -1106,8 +1231,8 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
             waterfalls, g0 * refined_gains; np.nan where unsolved
         meta: dict of stage products and diagnostics: 'data_model_ratio',
             'wgts', 'dlys', 'offsets', 'abs_amp_gains', 'g0', 'refined_gains',
-            and the refinement's 'iter', 'conv_crit', and
-            'divergent_chans' dicts keyed by
+            and the refinement's 'iter', 'conv_crit', 'divergent_chans' and
+            'fallback_chans' dicts keyed by
             (time index, pol) of per-channel (Nfreqs,) arrays
     '''
     if freqs is None:
@@ -1139,7 +1264,7 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
         data_model_ratio, wgts, g0, ant_to_SNAP_dict=ant_to_SNAP_dict,
         refine_tol=refine_tol,
         refine_maxiter=refine_maxiter, sync_tol=sync_tol,
-        sync_maxiter=sync_maxiter,
+        sync_maxiter=sync_maxiter, fallback_maxiter=fallback_maxiter,
         max_divergent_chan_frac=max_divergent_chan_frac, verbose=verbose)
 
     # every antenna with starting gains must come through refinement — a gap
