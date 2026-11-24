@@ -969,21 +969,15 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
         # non-finite residuals, or weights that overflowed or underflowed as the
         # gains ran away (which would leave the normal matrices unsolvable, and
         # LAPACK reports that differently on different platforms). Drop the
-        # offending channels and carry on if allowed. (Cells dropped from
-        # the solve above don't count.)
+        # offending channels and carry on; whether too many failed is decided
+        # after the solve and the fallback. (Cells dropped from the solve above
+        # don't count.)
         bad = ((~np.isfinite(resid_ratio) | ~np.isfinite(round_wgts)
                 | (round_wgts <= 0)) & (wgts_here > 0))
         if bad.any():
             newly_failed = active_idx[bad.any(axis=0)]
             failed_chans[newly_failed] = True
             active_chans[newly_failed] = False
-            if fallback_maxiter == 0 and failed_chans.sum() > max_failed:
-                raise RuntimeError(
-                    'Per-channel gain refinement diverged: non-finite gains or '
-                    f'weights in round {niter} at {int(failed_chans.sum())} channels '
-                    f'{good_chan_idx[failed_chans].tolist()}, more than '
-                    f'max_divergent_chan_frac={max_divergent_chan_frac} of '
-                    f'{nchans} unflagged channels allows.')
             continue
 
         if niter == 0:
@@ -1069,9 +1063,10 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             f'Per-channel gain refinement did not converge: '
             f'{int(failed_chans.sum())} channels failed '
             f'{good_chan_idx[failed_chans].tolist()} '
-            f'({int(unconverged.sum())} still above refine_tol={refine_tol} '
-            f'after {refine_maxiter} rounds'
-            + (f' and {fallback_maxiter} fallback rounds' if fallback_maxiter > 0 else '')
+            f'({int((failed_chans & ~unconverged).sum())} diverged and '
+            f'{int(unconverged.sum())} were still above refine_tol={refine_tol} '
+            f'after {refine_maxiter} Gauss-Newton rounds'
+            + (f', and none converged in {fallback_maxiter} fallback rounds' if fallback_maxiter > 0 else '')
             + f'; max relative chi^2 gradient over solved channels {worst:.2e}). '
             'Do not proceed with unconverged gains.')
     return full_gains, {'iter': chan_iters, 'conv_crit': conv_crit,
