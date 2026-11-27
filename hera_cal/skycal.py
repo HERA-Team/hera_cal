@@ -752,7 +752,7 @@ def _alternating_gain_updates(cell_ratio, cell_wgts, sel_i, sel_j, inc_i, inc_j,
 def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
                                   nants, refine_tol=1e-8,
                                   refine_maxiter=100, sync_tol=1e-3,
-                                  sync_maxiter=200, fallback_maxiter=20000,
+                                  sync_maxiter=200, fallback_maxiter=200000,
                                   max_divergent_chan_frac=0.0, verbose=False):
     '''Solve for per-antenna, per-channel complex gains g such that
     vis_ratio ~ g_i * conj(g_j) on each baseline, for a single
@@ -844,9 +844,8 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
             channels Gauss-Newton cannot solve (_alternating_gain_updates);
             0 turns the fallback off. Each channel stops as soon as it
             converges, so the cap costs nothing for channels that do; it is
-            set far above the ~1000 rounds that slowly converging channels
-            (sparse or weakly connected graphs) can need, so that reaching it
-            means a channel will not converge.
+            set about twice as high as the ~10^5 rounds the slowest channels
+            have needed on real data that we've observed so far.
         max_divergent_chan_frac: fraction of channels allowed to fail
             (diverge or exhaust refine_maxiter, and then fallback_maxiter)
             and come back as np.nan
@@ -1076,7 +1075,7 @@ def _refine_gains_single_pol_time(vis_ratio, ratio_wgts, ant_i_idx, ant_j_idx,
 
 def refine_gains(data_model_ratio, wgts, g0, ant_to_SNAP_dict=None,
                  refine_tol=1e-8, refine_maxiter=100,
-                 sync_tol=1e-3, sync_maxiter=200, fallback_maxiter=20000,
+                 sync_tol=1e-3, sync_maxiter=200, fallback_maxiter=200000,
                  max_divergent_chan_frac=0.0, verbose=False):
     '''Solve for per-antenna, per-channel refined gains on cross baselines,
     given starting gains g0. The data/model ratio divided by g0_i g0_j^* should
@@ -1188,7 +1187,7 @@ def sky_calibrate(data, model, autos=None, data_flags=None, model_flags=None,
                   ant_flags=None, auto_flags=None, ant_to_SNAP_dict=None,
                   freqs=None, bls=None, dt=None, df=None, noise_excess=1.0,
                   refine_tol=1e-8, refine_maxiter=100, sync_tol=1e-3,
-                  sync_maxiter=200, fallback_maxiter=20000,
+                  sync_maxiter=200, fallback_maxiter=200000,
                   max_divergent_chan_frac=0.0, verbose=False):
     '''Run the full staged sky-model-based calibration: data/model ratio →
     firstcal delays and offsets → autocorrelation-based amplitudes → per-channel
